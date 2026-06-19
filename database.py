@@ -1,0 +1,79 @@
+import streamlit as st
+from supabase import create_client, Client
+
+class DataEngine:
+    def __init__(self):
+        # 1. Inisialisasi koneksi Supabase menggunakan secrets
+        url: str = st.secrets["SUPABASE_URL"]
+        key: str = st.secrets["SUPABASE_KEY"]
+        self.supabase: Client = create_client(url, key)
+        
+        # 2. Tempat menyimpan data sementara di memori Streamlit
+        self.data_lembaga = {}
+        self.data_master = []
+        
+        # 3. Muat data saat sistem pertama kali dijalankan
+        self.muat_data()
+
+    def muat_data(self):
+        """Mengambil data Lembaga dan Biodata Santri dari Supabase."""
+        try:
+            # Ambil profil Lembaga (ambil 1 baris terakhir/terbaru)
+            res_lembaga = self.supabase.table("lembaga").select("*").order("id", desc=True).limit(1).execute()
+            if res_lembaga.data:
+                self.data_lembaga = res_lembaga.data[0]
+            
+            # Ambil Biodata Santri
+            res_santri = self.supabase.table("biodata_santri").select("*").execute()
+            if res_santri.data:
+                self.data_master = res_santri.data
+                
+        except Exception as e:
+            st.error(f"Gagal terhubung ke Supabase: {e}")
+
+    def get_daftar_nama(self):
+        """Mengembalikan daftar nama santri untuk menu Dropdown."""
+        return [santri["nama"] for santri in self.data_master]
+
+    def simpan_lembaga(self, data):
+            """Menyimpan atau memperbarui data profil Lembaga ke Supabase"""
+            try:
+                # Kita gunakan insert, karena di muat_data() kita selalu mengambil data terakhir (desc limit 1)
+                res = self.supabase.table("lembaga").insert(data).execute()
+                if res.data:
+                    self.data_lembaga = res.data[0] # Update data di memori
+                    return True, "Data Identitas Lembaga berhasil disimpan di Cloud!"
+            except Exception as e:
+                return False, f"Gagal menyimpan data: {e}"
+    def simpan_biodata(self, no_induk, nama, data_lengkap):
+        """Menyimpan biodata santri baru ke Supabase"""
+        try:
+            res = self.supabase.table("biodata_santri").insert({
+                "no_induk": no_induk,
+                "nama": nama,
+                "data_lengkap": data_lengkap # Disimpan dalam format JSONB
+            }).execute()
+            
+            if res.data:
+                self.muat_data() # Refresh data di memori agar tabel langsung update
+                return True, "Biodata santri berhasil ditambahkan ke Cloud!"
+        except Exception as e:
+            return False, f"Gagal menyimpan biodata: {e}"
+
+    def simpan_nilai(self, data_nilai):
+        """Menyimpan data nilai, absensi, dan kepribadian santri"""
+        try:
+            res = self.supabase.table("nilai_santri").insert(data_nilai).execute()
+            return True, "Data nilai berhasil disimpan ke Cloud!"
+        except Exception as e:
+            return False, f"Gagal menyimpan nilai: {e}"
+    def get_nilai(self, santri_id, semester):
+        """Mengambil data nilai santri berdasarkan ID dan Semester"""
+        try:
+            res = self.supabase.table("nilai_santri").select("*").eq("santri_id", santri_id).eq("semester", semester).execute()
+            if res.data:
+                return res.data[0]
+            return None
+        except Exception as e:
+            st.error(f"Gagal mengambil data nilai: {e}")
+            return None
