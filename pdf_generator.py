@@ -1,10 +1,10 @@
 import io
+import base64
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 from reportlab.platypus import Table, TableStyle
 from reportlab.lib import colors
 from reportlab.lib.units import cm
-import base64
 from reportlab.lib.utils import ImageReader
 
 def terbilang(angka):
@@ -20,43 +20,43 @@ class PDFGenerator:
     def __init__(self, db):
         self.db = db
 
+    def _get_dl_flat(self):
+        """Membongkar data profil_lengkap (JSONB) agar mudah dibaca oleh PDF"""
+        dl_raw = self.db.data_lembaga
+        profil = dl_raw.get("profil_lengkap", {})
+        dl_flat = {**dl_raw, **profil}
+        dl_flat["nomor_statistik"] = dl_raw.get("nsm", "-")
+        return dl_flat
+
     def cetak_cover(self, nama_santri):
-        """Menghasilkan PDF khusus untuk Cover Raport"""
         santri = next((s for s in self.db.data_master if s['nama'] == nama_santri), None)
         if not santri: return None
-        dl = self.db.data_lembaga
+        dl = self._get_dl_flat()
 
         buffer = io.BytesIO()
         c = canvas.Canvas(buffer, pagesize=A4)
         lebar, tinggi = A4
 
-        # ================= LOGO =================
         logo_b64 = dl.get("logo", "")
         if logo_b64:
             try:
-                # Membaca gambar dari database
                 logo_data = base64.b64decode(logo_b64)
                 logo_img = ImageReader(io.BytesIO(logo_data))
-                # Menggambar logo tepat di posisi tengah atas
                 c.drawImage(logo_img, lebar/2 - 2*cm, tinggi - 7*cm, 4*cm, 4*cm, mask='auto')
             except Exception as e:
                 c.rect(lebar/2 - 2*cm, tinggi - 6*cm, 4*cm, 4*cm)
                 c.drawCentredString(lebar/2, tinggi - 4*cm, "LOGO ERROR")
         else:
-            # Jika belum ada logo, buat kotak kosong (Placeholder lama)
             c.rect(lebar/2 - 2*cm, tinggi - 6*cm, 4*cm, 4*cm)
             c.setFont("Helvetica-Bold", 10)
             c.drawCentredString(lebar/2, tinggi - 4*cm, "LOGO")
             c.drawCentredString(lebar/2, tinggi - 4.5*cm, "MADRASAH")
-        # ========================================
 
-        # JUDUL BUKU RAPORT
         c.setFont("Helvetica-Bold", 28)
         c.drawCentredString(lebar/2, tinggi - 9*cm, "BUKU RAPORT")
         c.setFont("Helvetica-Bold", 18)
         c.drawCentredString(lebar/2, tinggi - 10.5*cm, "MADRASAH DINIYAH TAKMILIYAH ULA")
 
-        # IDENTITAS LEMBAGA
         c.setFont("Helvetica", 12)
         y_lembaga = tinggi - 13*cm
         labels = [
@@ -74,7 +74,6 @@ class PDFGenerator:
             c.drawString(4*cm, y_pos, lbl)
             c.drawString(9*cm, y_pos, f": {val}")
 
-        # NAMA SANTRI
         c.setFont("Helvetica-Bold", 14)
         c.drawCentredString(lebar/2, 8*cm, "NAMA SANTRI")
         
@@ -90,22 +89,19 @@ class PDFGenerator:
         return buffer
 
     def cetak_raport(self, nama_santri, semester):
-        """Menghasilkan PDF untuk Semester 1 (Ganjil) atau 2 (Genap)"""
         santri = next((s for s in self.db.data_master if s['nama'] == nama_santri), None)
         if not santri: return None
         
         nilai = self.db.get_nilai(santri['id'], semester)
         if not nilai: return None
 
-        # --- AMBIL RANKING (DIPINDAH KE ATAS SINI AGAR BISA MASUK TABEL) ---
         rank, total_siswa = self.db.get_ranking(santri['id'], semester)
-
-        dl = self.db.data_lembaga
+        dl = self._get_dl_flat()
+        
         buffer = io.BytesIO()
         c = canvas.Canvas(buffer, pagesize=A4)
         lebar, tinggi = A4
         
-        # JUDUL & KOP
         c.setFont("Helvetica-Bold", 16)
         c.drawCentredString(lebar/2, tinggi - 2*cm, "DAFTAR NILAI")
 
@@ -129,7 +125,6 @@ class PDFGenerator:
         c.drawString(x_kanan, y_kop - 1*cm, "Tahun Pelajaran")
         c.drawString(x_kanan + 3*cm, y_kop - 1*cm, f": {dl.get('tahun_pelajaran', '-')}")
 
-        # TABEL NILAI
         data_tabel = [['No.', 'Mata Pelajaran', 'Nilai Prestasi', '', 'Rata-rata\nKelas'], ['', '', 'Angka', 'Huruf', '']]
         mapels = [
             ("1", "Keagamaan", True),
@@ -147,7 +142,6 @@ class PDFGenerator:
                 skor = nilai['akademik'].get(teks, 0)
                 data_tabel.append([no, f"   {teks}", f"{skor:.0f}", terbilang(skor).capitalize(), '-'])
 
-        # --- TAMBAH BARIS JUMLAH & RANKING DI SINI ---
         data_tabel.append(['', 'JUMLAH', f"{nilai['jumlah']:.0f}", terbilang(nilai['jumlah']).capitalize(), '-'])
         data_tabel.append([f"Peringkat Kelas ke {rank} dari {total_siswa} santri", '', '', '', ''])
 
@@ -160,20 +154,15 @@ class PDFGenerator:
             ('SPAN', (0,0), (0,1)), ('SPAN', (1,0), (1,1)), ('SPAN', (2,0), (3,0)), ('SPAN', (4,0), (4,1)),
             ('SPAN', (2,2), (4,2)), ('FONTNAME', (0,2), (1,2), 'Helvetica-Bold'),
             ('SPAN', (2,12), (4,12)), ('FONTNAME', (0,12), (1,12), 'Helvetica-Bold'),
-            
-            # Style Baris Jumlah
             ('SPAN', (0,-2), (0,-2)), ('FONTNAME', (1,-2), (-1,-2), 'Helvetica-Bold'), ('BOX', (0,-2), (-1,-2), 1, colors.black),
-            # Style Baris Peringkat
             ('SPAN', (0,-1), (-1,-1)), ('ALIGN', (0,-1), (-1,-1), 'LEFT'), ('FONTNAME', (0,-1), (-1,-1), 'Helvetica-Bold'), ('BOX', (0,-1), (-1,-1), 1, colors.black)
         ]))
-        
         w, h = tabel.wrap(lebar, tinggi)
         y_tabel = y_kop - 2*cm - h
         tabel.drawOn(c, 2*cm, y_tabel)
 
         y_bawah = y_tabel - 0.5*cm
 
-        # TAMBAHAN KHUSUS SEMESTER 2: KEPUTUSAN
         if semester == 2:
             status_teks = f"KEPUTUSAN :\nDengan memperhatikan hasil yang dicapai pada Semester 1 dan 2,\nsantri ini ditetapkan : STATUS {nilai.get('status', '-').upper()}"
             c.setFont("Helvetica-Bold", 10)
@@ -181,9 +170,8 @@ class PDFGenerator:
             for line in status_teks.split('\n'):
                 t.textLine(line)
             c.drawText(t)
-            y_bawah -= 2*cm # Geser ke bawah
+            y_bawah -= 2*cm 
 
-        # TABEL KEPRIBADIAN & ABSENSI
         p = nilai["kepribadian"]
         a = nilai["absen"]
         data_bawah = [
@@ -202,7 +190,6 @@ class PDFGenerator:
         y_bawah = y_bawah - hb
         tabel_bawah.drawOn(c, 2*cm, y_bawah)
 
-        # TANDA TANGAN
         c.setFont("Helvetica", 10)
         y_ttd = y_bawah - 1.5*cm
         c.drawString(2*cm, y_ttd, f"Diberikan di : {dl.get('tempat_raport', '-')}")
