@@ -1,68 +1,65 @@
 import streamlit as st
 
 def render(db):
-    st.header("👤 Input Biodata Santri Lengkap")
-    
-    with st.form("form_biodata"):
-        # GRUP 1: IDENTITAS DASAR
-        st.subheader("A. Identitas Dasar")
-        col1, col2 = st.columns(2)
-        with col1:
-            no_induk = st.text_input("No. Induk")
-            nama = st.text_input("Nama Lengkap (*Wajib)")
-            tempat_lahir = st.text_input("Tempat Lahir")
-            tanggal_lahir = st.text_input("Tanggal Lahir")
-            jk = st.selectbox("Jenis Kelamin", ["Laki-laki", "Perempuan"])
-        with col2:
-            agama = st.text_input("Agama", value="Islam")
-            status_keluarga = st.text_input("Status dalam Keluarga", value="Anak Kandung")
-            anak_ke = st.text_input("Anak Ke-")
-            alamat_santri = st.text_area("Alamat Lengkap Santri")
+    st.header("👤 Input Biodata Santri")
 
-        st.markdown("---")
-        
-        # GRUP 2: DATA ORANG TUA
-        st.subheader("B. Data Orang Tua")
-        col3, col4 = st.columns(2)
-        with col3:
+    if not db.lembaga_id:
+        st.warning("⚠️ Anda belum login. Silakan login terlebih dahulu.")
+        return
+
+    # Menarik Master Data dari memori lembaga
+    pengaturan = db.data_lembaga.get("pengaturan_master", {})
+    list_kelas = pengaturan.get("kelas", ["TKA", "TPA", "MDTU"])
+    list_alamat = pengaturan.get("alamat", ["- Belum diatur di Master Data -"])
+
+    with st.form("form_biodata"):
+        col1, col2 = st.columns(2)
+
+        with col1:
+            st.subheader("Identitas Dasar")
+            no_induk = st.text_input("Nomor Induk Santri")
+            nama = st.text_input("Nama Lengkap Santri")
+            
+            # Dropdown Dinamis dari Master Data
+            kelas_santri = st.selectbox("Tingkatan Kelas", list_kelas)
+            desa_kelurahan = st.selectbox("Desa / Kelurahan (Alamat)", list_alamat)
+            
+            jk = st.selectbox("Jenis Kelamin", ["Laki-laki", "Perempuan"])
+            tempat_lahir = st.text_input("Tempat Lahir")
+            tanggal_lahir = st.date_input("Tanggal Lahir")
+            anak_ke = st.text_input("Anak Ke-")
+
+        with col2:
+            st.subheader("Data Orang Tua")
             nama_ayah = st.text_input("Nama Ayah")
             pekerjaan_ayah = st.text_input("Pekerjaan Ayah")
-        with col4:
             nama_ibu = st.text_input("Nama Ibu")
             pekerjaan_ibu = st.text_input("Pekerjaan Ibu")
-        alamat_ortu = st.text_area("Alamat Orang Tua (Isi jika berbeda dengan alamat santri)")
 
-        st.markdown("---")
-
-        # GRUP 3: DATA WALI SANTRI
-        st.subheader("C. Data Wali Santri (Opsional)")
-        col5, col6 = st.columns(2)
-        with col5:
+            st.subheader("Data Wali (Opsional)")
             nama_wali = st.text_input("Nama Wali")
             pekerjaan_wali = st.text_input("Pekerjaan Wali")
-        with col6:
-            alamat_wali = st.text_area("Alamat Wali Lengkap")
-            
-        submitted = st.form_submit_button("➕ Simpan Biodata Lengkap")
-        
+
+        submitted = st.form_submit_button("💾 Simpan Biodata Santri")
+
         if submitted:
-            if not nama.strip():
-                st.error("Nama Lengkap tidak boleh kosong!")
+            if not no_induk or not nama:
+                st.error("Nomor Induk dan Nama Santri wajib diisi!")
             else:
-                # Semua field tambahan dibungkus ke dalam JSONB
                 data_lengkap = {
-                    "Tempat Lahir": tempat_lahir, "Tanggal Lahir": tanggal_lahir,
-                    "Jenis Kelamin": jk, "Agama": agama, 
-                    "Status Keluarga": status_keluarga, "Anak Ke": anak_ke,
-                    "Alamat Santri": alamat_santri, "Nama Ayah": nama_ayah, 
-                    "Pekerjaan Ayah": pekerjaan_ayah, "Nama Ibu": nama_ibu, 
-                    "Pekerjaan Ibu": pekerjaan_ibu, "Alamat Ortu": alamat_ortu,
-                    "Nama Wali": nama_wali, "Pekerjaan Wali": pekerjaan_wali, 
-                    "Alamat Wali": alamat_wali
+                    "kelas_santri": kelas_santri,
+                    "jenis_kelamin": jk,
+                    "tempat_lahir": tempat_lahir,
+                    "tanggal_lahir": str(tanggal_lahir),
+                    "anak_ke": anak_ke,
+                    "desa_kelurahan": desa_kelurahan,
+                    "nama_ayah": nama_ayah, "pekerjaan_ayah": pekerjaan_ayah,
+                    "nama_ibu": nama_ibu, "pekerjaan_ibu": pekerjaan_ibu,
+                    "nama_wali": nama_wali, "pekerjaan_wali": pekerjaan_wali
                 }
+                
                 sukses, pesan = db.simpan_biodata(no_induk, nama, data_lengkap)
                 if sukses:
                     st.success(pesan)
-                    st.rerun()
                 else:
                     st.error(pesan)
