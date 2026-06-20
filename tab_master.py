@@ -13,19 +13,19 @@ def render(db):
     
     # Template Kategori Bawaan Berdasarkan Tingkat
     if tingkatan == "TKA":
-        tmpl_kelas = ["TKA Kecil", "TKA Besar"]
+        tmpl_kelas = ["TKA A", "TKA B"]
         tmpl_mapel = {
             "Mata Pelajaran Pokok": ["Hafalan Surat Pendek", "Hafalan Doa Harian", "Membaca Iqro/Al-Quran", "Praktek Sholat", "Menulis Huruf Hijaiyah"],
             "Muatan Lokal": ["Akhlaq / Adab"]
         }
     elif tingkatan == "TPA":
-        tmpl_kelas = ["TPA Level 1", "TPA Level 2", "TPA Level 3"]
+        tmpl_kelas = ["TPA A", "TPA B"]
         tmpl_mapel = {
             "Keagamaan Dasar": ["Tahsin Al-Quran", "Ilmu Tajwid", "Hafalan Juz Amma", "Dinul Islam", "Praktek Ibadah"],
             "Muatan Lokal": ["Bahasa Arab Dasar"]
         }
     else: # MDTU / Lainnya
-        tmpl_kelas = ["Kelas 1", "Kelas 2", "Kelas 3", "Kelas 4"]
+        tmpl_kelas = ["Kelas 1", "Kelas 2", "Kelas 3", "Kelas 4", "Kelas 5", "Kelas 6"]
         tmpl_mapel = {
             "Keagamaan": ["AL QUR'AN", "AL HADITS", "AQIDAH", "AKHLAQ", "FIQIH", "TARIKH ISLAM", "BAHASA ARAB", "NAHWU", "SHARAF"],
             "Muatan Lokal": ["PRAKTIK IBADAH", "BTQ", "Ke-NU-an"]
@@ -53,7 +53,7 @@ def render(db):
 
         with col1:
             st.subheader("1. Daftar Kelas (Dinamis)")
-            input_kelas = st.text_area("Masukkan tiap kelas di baris baru (ENTER)", value="\n".join(def_kelas), height=100)
+            input_kelas = st.text_area("Masukkan tiap kelas di baris baru (ENTER)", value="\n".join(def_kelas), height=140)
 
             st.subheader("2. Kategori & Mata Pelajaran")
             st.caption("Kelompokkan mapel sesuai kategorinya agar rapi saat dicetak.")
@@ -70,7 +70,7 @@ def render(db):
 
         with col2:
             st.subheader("3. Daftar Alamat Santri")
-            input_alamat = st.text_area("Daftar Desa/Kecamatan/Jalan", value="\n".join(def_alamat), height=100)
+            input_alamat = st.text_area("Daftar Desa/Kecamatan/Jalan", value="\n".join(def_alamat), height=140)
 
             st.subheader("4. Narasi Predikat Nilai")
             narasi_A = st.text_area("Predikat A (Sangat Baik)", value=def_narasi.get("A", ""), height=68)
