@@ -3,67 +3,93 @@ from supabase import create_client, Client
 
 class DataEngine:
     def __init__(self):
-        # 1. Inisialisasi koneksi Supabase
         url: str = st.secrets["SUPABASE_URL"]
         key: str = st.secrets["SUPABASE_KEY"]
         self.supabase: Client = create_client(url, key)
         
-        # 2. Tempat menyimpan data di memori
         self.data_lembaga = {}
         self.data_master = []
-        self.lembaga_id = None # Ini adalah "Pagar Gaib" kita
+        self.lembaga_id = None 
+        self.role = None # Menyimpan status apakah user ini 'admin' atau 'guru'
         
-    def register_madrasah(self, email, password, nama_madrasah, nsm):
-        """Mendaftarkan Madrasah Baru Menggunakan Email"""
+    def get_semua_madrasah(self):
+        """Menarik semua daftar lembaga untuk dropdown di halaman pendaftaran Guru"""
         try:
-            # 1. Daftarkan email dan password ke Sistem Auth Supabase
-            auth_res = self.supabase.auth.sign_up({
-                "email": email,
-                "password": password
-            })
-            
-            # 2. Jika berhasil, masukkan data awal ke tabel lembaga
+            res = self.supabase.table("lembaga").select("id, nama_madrasah").execute()
+            return res.data if res.data else []
+        except:
+            return []
+
+    def register_madrasah(self, email, password, nama_madrasah, nsm):
+        try:
+            auth_res = self.supabase.auth.sign_up({"email": email, "password": password})
             if auth_res.user:
                 self.supabase.table("lembaga").insert({
                     "email": email,
                     "nama_madrasah": nama_madrasah,
                     "nsm": nsm
                 }).execute()
-                return True, "Pendaftaran berhasil! Silakan pindah ke tab Login."
+                return True, "Pendaftaran Lembaga berhasil! Silakan pindah ke tab Login."
             return False, "Gagal mendaftar. Silakan coba lagi."
         except Exception as e:
             return False, f"Pendaftaran error: {e}"
 
-    def login(self, email, password):
-        """Login dan tarik profil lembaga"""
+    def register_guru(self, email, password, nama_guru, lembaga_id):
+        """Mendaftarkan akun Guru dan menautkannya ke Lembaga yang dipilih"""
         try:
-            # 1. Autentikasi email dan password
-            res = self.supabase.auth.sign_in_with_password({
-                "email": email,
-                "password": password
-            })
-            
+            auth_res = self.supabase.auth.sign_up({"email": email, "password": password})
+            if auth_res.user:
+                self.supabase.table("guru").insert({
+                    "email": email,
+                    "nama_guru": nama_guru,
+                    "lembaga_id": lembaga_id,
+                    "role": "guru"
+                }).execute()
+                return True, "Akun Guru berhasil didaftarkan! Silakan Login."
+            return False, "Gagal mendaftar guru."
+        except Exception as e:
+            return False, f"Pendaftaran error: {e}"
+
+    def login(self, email, password):
+        try:
+            res = self.supabase.auth.sign_in_with_password({"email": email, "password": password})
             if res.user:
-                # 2. Cari lembaga_id berdasarkan email ini
+                # 1. Cek apakah dia Admin/Kepala Lembaga
                 lembaga_res = self.supabase.table("lembaga").select("*").eq("email", email).execute()
                 if lembaga_res.data:
                     self.data_lembaga = lembaga_res.data[0]
-                    self.lembaga_id = self.data_lembaga['id'] # Pasang Pagar Gaib
-                    self.muat_data_santri() # Tarik santri khusus madrasah ini
-                    return True, "Login berhasil!"
-                return False, "Data profil lembaga tidak ditemukan di database."
+                    self.lembaga_id = self.data_lembaga['id']
+                    self.role = "admin"
+                    self.muat_data_santri()
+                    return True, "Login berhasil sebagai Admin Madrasah!"
+
+                # 2. Cek apakah dia Guru
+                guru_res = self.supabase.table("guru").select("*").eq("email", email).execute()
+                if guru_res.data:
+                    guru_data = guru_res.data[0]
+                    self.lembaga_id = guru_data['lembaga_id']
+                    self.role = "guru"
+                    
+                    # Tarik data lembaga induknya agar nama madrasah tetap muncul di aplikasi
+                    induk_res = self.supabase.table("lembaga").select("*").eq("id", self.lembaga_id).execute()
+                    if induk_res.data:
+                        self.data_lembaga = induk_res.data[0]
+                        
+                    self.muat_data_santri()
+                    return True, f"Login berhasil! Selamat datang, Guru {guru_data['nama_guru']}."
+
+                return False, "Akun tidak terdaftar di sistem."
         except Exception as e:
-            return False, f"Email atau Password salah!"
+            return False, "Email atau Password salah!"
 
     def logout(self):
-        """Keluar dari aplikasi dan hapus jejak memori"""
         self.supabase.auth.sign_out()
         self.data_lembaga = {}
         self.data_master = []
         self.lembaga_id = None
+        self.role = None
 
     def muat_data_santri(self):
-        """Menarik biodata HANYA untuk madrasah yang sedang login"""
         if not self.lembaga_id: return
         try:
             res = self.supabase.table("biodata_santri").select("*").eq("lembaga_id", self.lembaga_id).execute()
@@ -75,10 +101,8 @@ class DataEngine:
         return [santri["nama"] for santri in self.data_master]
 
     def simpan_lembaga(self, data):
-        """Memperbarui profil lembaga"""
         if not self.lembaga_id: return False, "Akses ditolak"
         try:
-            # Update hanya baris yang ID-nya cocok dengan lembaga_id login
             res = self.supabase.table("lembaga").update(data).eq("id", self.lembaga_id).execute()
             if res.data:
                 self.data_lembaga = res.data[0]
@@ -86,14 +110,23 @@ class DataEngine:
         except Exception as e:
             return False, f"Gagal menyimpan data: {e}"
 
+    def simpan_pengaturan(self, data_pengaturan):
+        if not self.lembaga_id: return False, "Akses ditolak."
+        try:
+            res = self.supabase.table("lembaga").update({"pengaturan_master": data_pengaturan}).eq("id", self.lembaga_id).execute()
+            if res.data:
+                self.data_lembaga = res.data[0]
+                return True, "Master Data berhasil disimpan ke Cloud!"
+            return False, "Gagal mengupdate database."
+        except Exception as e:
+            return False, f"Error saat menyimpan pengaturan: {e}"
+
     def simpan_biodata(self, no_induk, nama, data_lengkap):
         if not self.lembaga_id: return False, "Akses ditolak"
         try:
             res = self.supabase.table("biodata_santri").insert({
-                "lembaga_id": self.lembaga_id, # Kunci santri ini ke madrasah yang login
-                "no_induk": no_induk,
-                "nama": nama,
-                "data_lengkap": data_lengkap
+                "lembaga_id": self.lembaga_id,
+                "no_induk": no_induk, "nama": nama, "data_lengkap": data_lengkap
             }).execute()
             if res.data:
                 self.muat_data_santri()
@@ -103,12 +136,9 @@ class DataEngine:
 
     def simpan_nilai(self, data_nilai, id_nilai=None):
         if not self.lembaga_id: return False, "Akses ditolak"
-        
-        # Selalu sisipkan lembaga_id demi keamanan
         data_nilai["lembaga_id"] = self.lembaga_id 
         try:
             if id_nilai:
-                # Update but MUST match lembaga_id to prevent hacking
                 self.supabase.table("nilai_santri").update(data_nilai).eq("id", id_nilai).eq("lembaga_id", self.lembaga_id).execute()
                 pesan = "Data nilai berhasil diperbarui!"
             else:
@@ -146,17 +176,3 @@ class DataEngine:
                 rank += 1
             return "-", len(data_urut)
         except: return "-", 0
-    def simpan_pengaturan(self, data_pengaturan):
-        """Menyimpan Master Data (Kelas, Mapel, Alamat, Narasi) khusus untuk lembaga yang sedang login"""
-        if not self.lembaga_id: return False, "Akses ditolak. Anda belum login."
-        try:
-            res = self.supabase.table("lembaga").update({
-                "pengaturan_master": data_pengaturan
-            }).eq("id", self.lembaga_id).execute()
-
-            if res.data:
-                self.data_lembaga = res.data[0] # Segarkan memori lokal
-                return True, "Master Data berhasil disimpan ke Cloud!"
-            return False, "Gagal mengupdate database."
-        except Exception as e:
-            return False, f"Error saat menyimpan pengaturan: {e}"
