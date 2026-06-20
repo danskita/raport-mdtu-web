@@ -3,112 +3,146 @@ from supabase import create_client, Client
 
 class DataEngine:
     def __init__(self):
-        # 1. Inisialisasi koneksi Supabase menggunakan secrets
+        # 1. Inisialisasi koneksi Supabase
         url: str = st.secrets["SUPABASE_URL"]
         key: str = st.secrets["SUPABASE_KEY"]
         self.supabase: Client = create_client(url, key)
         
-        # 2. Tempat menyimpan data sementara di memori Streamlit
+        # 2. Tempat menyimpan data di memori
         self.data_lembaga = {}
         self.data_master = []
+        self.lembaga_id = None # Ini adalah "Pagar Gaib" kita
         
-        # 3. Muat data saat sistem pertama kali dijalankan
-        self.muat_data()
-
-    def muat_data(self):
-        """Mengambil data Lembaga dan Biodata Santri dari Supabase."""
+    def register_madrasah(self, email, password, nama_madrasah, nsm):
+        """Mendaftarkan Madrasah Baru Menggunakan Email"""
         try:
-            # Ambil profil Lembaga (ambil 1 baris terakhir/terbaru)
-            res_lembaga = self.supabase.table("lembaga").select("*").order("id", desc=True).limit(1).execute()
-            if res_lembaga.data:
-                self.data_lembaga = res_lembaga.data[0]
+            # 1. Daftarkan email dan password ke Sistem Auth Supabase
+            auth_res = self.supabase.auth.sign_up({
+                "email": email,
+                "password": password
+            })
             
-            # Ambil Biodata Santri
-            res_santri = self.supabase.table("biodata_santri").select("*").execute()
-            if res_santri.data:
-                self.data_master = res_santri.data
-                
+            # 2. Jika berhasil, masukkan data awal ke tabel lembaga
+            if auth_res.user:
+                self.supabase.table("lembaga").insert({
+                    "email": email,
+                    "nama_madrasah": nama_madrasah,
+                    "nsm": nsm
+                }).execute()
+                return True, "Pendaftaran berhasil! Silakan pindah ke tab Login."
+            return False, "Gagal mendaftar. Silakan coba lagi."
         except Exception as e:
-            st.error(f"Gagal terhubung ke Supabase: {e}")
+            return False, f"Pendaftaran error: {e}"
+
+    def login(self, email, password):
+        """Login dan tarik profil lembaga"""
+        try:
+            # 1. Autentikasi email dan password
+            res = self.supabase.auth.sign_in_with_password({
+                "email": email,
+                "password": password
+            })
+            
+            if res.user:
+                # 2. Cari lembaga_id berdasarkan email ini
+                lembaga_res = self.supabase.table("lembaga").select("*").eq("email", email).execute()
+                if lembaga_res.data:
+                    self.data_lembaga = lembaga_res.data[0]
+                    self.lembaga_id = self.data_lembaga['id'] # Pasang Pagar Gaib
+                    self.muat_data_santri() # Tarik santri khusus madrasah ini
+                    return True, "Login berhasil!"
+                return False, "Data profil lembaga tidak ditemukan di database."
+        except Exception as e:
+            return False, f"Email atau Password salah!"
+
+    def logout(self):
+        """Keluar dari aplikasi dan hapus jejak memori"""
+        self.supabase.auth.sign_out()
+        self.data_lembaga = {}
+        self.data_master = []
+        self.lembaga_id = None
+
+    def muat_data_santri(self):
+        """Menarik biodata HANYA untuk madrasah yang sedang login"""
+        if not self.lembaga_id: return
+        try:
+            res = self.supabase.table("biodata_santri").select("*").eq("lembaga_id", self.lembaga_id).execute()
+            self.data_master = res.data if res.data else []
+        except Exception as e:
+            st.error(f"Gagal memuat data santri: {e}")
 
     def get_daftar_nama(self):
-        """Mengembalikan daftar nama santri untuk menu Dropdown."""
         return [santri["nama"] for santri in self.data_master]
 
     def simpan_lembaga(self, data):
-        """Menyimpan atau memperbarui data profil Lembaga ke Supabase"""
+        """Memperbarui profil lembaga"""
+        if not self.lembaga_id: return False, "Akses ditolak"
         try:
-            # Kita gunakan insert, karena di muat_data() kita selalu mengambil data terakhir (desc limit 1)
-            res = self.supabase.table("lembaga").insert(data).execute()
+            # Update hanya baris yang ID-nya cocok dengan lembaga_id login
+            res = self.supabase.table("lembaga").update(data).eq("id", self.lembaga_id).execute()
             if res.data:
-                self.data_lembaga = res.data[0] # Update data di memori
-                return True, "Data Identitas Lembaga berhasil disimpan di Cloud!"
+                self.data_lembaga = res.data[0]
+                return True, "Data Identitas Lembaga berhasil diperbarui!"
         except Exception as e:
             return False, f"Gagal menyimpan data: {e}"
 
     def simpan_biodata(self, no_induk, nama, data_lengkap):
-        """Menyimpan biodata santri baru ke Supabase"""
+        if not self.lembaga_id: return False, "Akses ditolak"
         try:
             res = self.supabase.table("biodata_santri").insert({
+                "lembaga_id": self.lembaga_id, # Kunci santri ini ke madrasah yang login
                 "no_induk": no_induk,
                 "nama": nama,
-                "data_lengkap": data_lengkap # Disimpan dalam format JSONB
+                "data_lengkap": data_lengkap
             }).execute()
-            
             if res.data:
-                self.muat_data() # Refresh data di memori agar tabel langsung update
-                return True, "Biodata santri berhasil ditambahkan ke Cloud!"
+                self.muat_data_santri()
+                return True, "Biodata santri berhasil ditambahkan!"
         except Exception as e:
             return False, f"Gagal menyimpan biodata: {e}"
 
     def simpan_nilai(self, data_nilai, id_nilai=None):
-        """Menyimpan data baru atau mengupdate data nilai yang sudah ada di Supabase"""
+        if not self.lembaga_id: return False, "Akses ditolak"
+        
+        # Selalu sisipkan lembaga_id demi keamanan
+        data_nilai["lembaga_id"] = self.lembaga_id 
         try:
             if id_nilai:
-                # Jika id_nilai diberikan, lakukan UPDATE ke baris yang sudah ada
-                res = self.supabase.table("nilai_santri").update(data_nilai).eq("id", id_nilai).execute()
-                pesan = "Data nilai berhasil diperbarui di Cloud!"
+                # Update but MUST match lembaga_id to prevent hacking
+                self.supabase.table("nilai_santri").update(data_nilai).eq("id", id_nilai).eq("lembaga_id", self.lembaga_id).execute()
+                pesan = "Data nilai berhasil diperbarui!"
             else:
-                # Jika tidak ada id_nilai, lakukan INSERT sebagai data baru
-                res = self.supabase.table("nilai_santri").insert(data_nilai).execute()
-                pesan = "Data nilai baru berhasil ditambahkan ke Cloud!"
+                self.supabase.table("nilai_santri").insert(data_nilai).execute()
+                pesan = "Data nilai baru berhasil ditambahkan!"
             return True, pesan
         except Exception as e:
             return False, f"Gagal menyimpan nilai: {e}"
 
     def get_nilai(self, santri_id, semester):
-        """Mengambil data nilai santri berdasarkan ID dan Semester"""
+        if not self.lembaga_id: return None
         try:
-            res = self.supabase.table("nilai_santri").select("*").eq("santri_id", santri_id).eq("semester", semester).execute()
-            if res.data:
-                return res.data[0]
+            res = self.supabase.table("nilai_santri").select("*").eq("santri_id", santri_id).eq("semester", semester).eq("lembaga_id", self.lembaga_id).execute()
+            if res.data: return res.data[0]
             return None
-        except Exception as e:
-            st.error(f"Gagal mengambil data nilai: {e}")
-            return None
-
-    def get_ranking(self, santri_id, semester):
-        """Menghitung ranking berdasarkan jumlah nilai terbesar"""
-        try:
-            res = self.supabase.table("nilai_santri").select("santri_id, jumlah").eq("semester", semester).execute()
-            if not res.data: return "-", 0
-            
-            # Urutkan dari jumlah nilai terbesar ke terkecil
-            data_urut = sorted(res.data, key=lambda x: x['jumlah'], reverse=True)
-            
-            rank = 1
-            for item in data_urut:
-                if item['santri_id'] == santri_id:
-                    return rank, len(data_urut)
-                rank += 1
-            return "-", len(data_urut)
-        except:
-            return "-", 0
+        except: return None
 
     def get_semua_nilai(self, semester):
-        """Mengambil semua data nilai untuk fitur Tabel Rekap"""
+        if not self.lembaga_id: return []
         try:
-            res = self.supabase.table("nilai_santri").select("*").eq("semester", semester).execute()
+            res = self.supabase.table("nilai_santri").select("*").eq("semester", semester).eq("lembaga_id", self.lembaga_id).execute()
             return res.data if res.data else []
-        except:
-            return []
+        except: return []
+
+    def get_ranking(self, santri_id, semester):
+        if not self.lembaga_id: return "-", 0
+        try:
+            res = self.supabase.table("nilai_santri").select("santri_id, jumlah").eq("semester", semester).eq("lembaga_id", self.lembaga_id).execute()
+            if not res.data: return "-", 0
+            
+            data_urut = sorted(res.data, key=lambda x: x['jumlah'], reverse=True)
+            rank = 1
+            for item in data_urut:
+                if item['santri_id'] == santri_id: return rank, len(data_urut)
+                rank += 1
+            return "-", len(data_urut)
+        except: return "-", 0

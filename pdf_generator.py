@@ -4,6 +4,8 @@ from reportlab.pdfgen import canvas
 from reportlab.platypus import Table, TableStyle
 from reportlab.lib import colors
 from reportlab.lib.units import cm
+import base64
+from reportlab.lib.utils import ImageReader
 
 def terbilang(angka):
     angka = int(angka)
@@ -28,11 +30,25 @@ class PDFGenerator:
         c = canvas.Canvas(buffer, pagesize=A4)
         lebar, tinggi = A4
 
-        # KOTAK LOGO (Placeholder)
-        c.rect(lebar/2 - 2*cm, tinggi - 6*cm, 4*cm, 4*cm)
-        c.setFont("Helvetica-Bold", 10)
-        c.drawCentredString(lebar/2, tinggi - 4*cm, "LOGO")
-        c.drawCentredString(lebar/2, tinggi - 4.5*cm, "MADRASAH")
+        # ================= LOGO =================
+        logo_b64 = dl.get("logo", "")
+        if logo_b64:
+            try:
+                # Membaca gambar dari database
+                logo_data = base64.b64decode(logo_b64)
+                logo_img = ImageReader(io.BytesIO(logo_data))
+                # Menggambar logo tepat di posisi tengah atas
+                c.drawImage(logo_img, lebar/2 - 2*cm, tinggi - 7*cm, 4*cm, 4*cm, mask='auto')
+            except Exception as e:
+                c.rect(lebar/2 - 2*cm, tinggi - 6*cm, 4*cm, 4*cm)
+                c.drawCentredString(lebar/2, tinggi - 4*cm, "LOGO ERROR")
+        else:
+            # Jika belum ada logo, buat kotak kosong (Placeholder lama)
+            c.rect(lebar/2 - 2*cm, tinggi - 6*cm, 4*cm, 4*cm)
+            c.setFont("Helvetica-Bold", 10)
+            c.drawCentredString(lebar/2, tinggi - 4*cm, "LOGO")
+            c.drawCentredString(lebar/2, tinggi - 4.5*cm, "MADRASAH")
+        # ========================================
 
         # JUDUL BUKU RAPORT
         c.setFont("Helvetica-Bold", 28)
