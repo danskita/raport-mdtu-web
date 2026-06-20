@@ -4,7 +4,6 @@ import base64
 def render(db):
     st.header("🏛️ Profil & Identitas Lembaga")
 
-    # Tarik data dari database (kolom utama dan kolom JSONB profil_lengkap)
     dl_raw = db.data_lembaga
     profil = dl_raw.get("profil_lengkap", {})
 
@@ -14,13 +13,18 @@ def render(db):
         with col1:
             nama = st.text_input("Nama Madrasah", value=dl_raw.get("nama_madrasah", ""))
             nsm = st.text_input("Nomor Statistik (NSM)", value=dl_raw.get("nsm", ""))
+            
+            # --- SAKELAR UTAMA TINGKATAN LEMBAGA ---
+            opsi_tingkatan = ["MDTU", "TKA", "TPA", "Lainnya"]
+            idx_tingkat = opsi_tingkatan.index(profil.get("tingkatan", "MDTU")) if profil.get("tingkatan", "MDTU") in opsi_tingkatan else 0
+            tingkatan = st.selectbox("Tingkatan Lembaga (Menentukan Mata Pelajaran)", opsi_tingkatan, index=idx_tingkat)
+            
             alamat = st.text_input("Alamat Jalan", value=profil.get("alamat", ""))
             desa = st.text_input("Desa/Kelurahan", value=profil.get("desa_kelurahan", ""))
-            kecamatan = st.text_input("Kecamatan", value=profil.get("kecamatan", ""))
         with col2:
+            kecamatan = st.text_input("Kecamatan", value=profil.get("kecamatan", ""))
             kabupaten = st.text_input("Kabupaten/Kota", value=profil.get("kabupaten_kota", ""))
             provinsi = st.text_input("Provinsi", value=profil.get("provinsi", ""))
-            kelas = st.text_input("Kelas", value=profil.get("kelas", ""))
             tahun = st.text_input("Tahun Pelajaran", value=profil.get("tahun_pelajaran", ""))
 
         st.subheader("Pejabat & Pengesahan")
@@ -50,17 +54,16 @@ def render(db):
         submitted = st.form_submit_button("💾 Simpan Perubahan")
 
         if submitted:
-            # Strukturkan data sesuai format Multi-Tenant yang baru!
             data_baru = {
                 "nama_madrasah": nama, 
                 "nsm": nsm, 
                 "profil_lengkap": {
+                    "tingkatan": tingkatan, # <-- Menyimpan pilihan Tingkatan
                     "alamat": alamat, 
                     "desa_kelurahan": desa, 
                     "kecamatan": kecamatan, 
                     "kabupaten_kota": kabupaten,
                     "provinsi": provinsi, 
-                    "kelas": kelas, 
                     "tahun_pelajaran": tahun,
                     "kepala_madin": kepala, 
                     "wali_kelas": wali, 
