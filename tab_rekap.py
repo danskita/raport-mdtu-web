@@ -42,13 +42,12 @@ def render(db):
         })
         rank += 1
         
-    # Tampilkan persis seperti tabel Excel
     df = pd.DataFrame(tabel_rekap)
     
-    # Gunakan fitur styling Pandas untuk mempercantik
+    # Gunakan fitur styling Pandas untuk mempercantik dengan parameter BARU (width='stretch')
     st.dataframe(
         df.style.set_properties(**{'background-color': '#f0fdf4', 'color': 'black'}, subset=['JUMLAH', 'RATA-RATA'])
           .set_properties(**{'background-color': '#fef08a', 'color': 'black', 'font-weight': 'bold'}, subset=['RANKING'])
           .format({'RATA-RATA': '{:.2f}'}),
-        use_container_width=True, hide_index=True
+        width='stretch', hide_index=True
     )

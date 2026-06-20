@@ -22,5 +22,5 @@ def render(db):
             
         df = pd.DataFrame(df_list)
         
-        # Tampilkan sebagai Dataframe Streamlit yang bisa di-sort dan di-scroll
-        st.dataframe(df, use_container_width=True)
+        # Tampilkan sebagai Dataframe Streamlit dengan parameter gaya BARU (width='stretch')
+        st.dataframe(df, width='stretch')
