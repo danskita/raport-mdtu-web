@@ -1,4 +1,5 @@
 import streamlit as st
+import time
 from database import DataEngine
 
 # Import semua tab modul
@@ -41,8 +42,13 @@ if not st.session_state.logged_in:
                 with st.spinner("Mencocokkan kredensial..."):
                     sukses, pesan = db.login(email, password)
                     if sukses:
+                        # Menampilkan pesan sukses
+                        st.success("✅ Login Berhasil! Memuat dasbor madrasah Anda...")
+                        # Menahan layar selama 1.5 detik agar pesan bisa dibaca
+                        time.sleep(1.5) 
+                        
                         st.session_state.logged_in = True
-                        st.rerun() # Refresh agar pindah ke Dashboard Utama
+                        st.rerun() # Pindah ke Dashboard Utama
                     else:
                         st.error(pesan)
                         
@@ -63,8 +69,11 @@ if not st.session_state.logged_in:
                     with st.spinner("Mendaftarkan ke Cloud Supabase..."):
                         sukses, pesan = db.register_madrasah(new_email, new_pass, new_nama, new_nsm)
                         if sukses:
-                            st.success(pesan)
+                            # Menampilkan pesan sukses dan animasi
+                            st.success(f"🎉 {pesan}")
                             st.balloons()
+                            # Menahan layar selama 2 detik agar balon selesai terbang
+                            time.sleep(2) 
                         else:
                             st.error(pesan)
     st.stop() # Hentikan kode agar menu utama tidak muncul
