@@ -146,3 +146,17 @@ class DataEngine:
                 rank += 1
             return "-", len(data_urut)
         except: return "-", 0
+    def simpan_pengaturan(self, data_pengaturan):
+        """Menyimpan Master Data (Kelas, Mapel, Alamat, Narasi) khusus untuk lembaga yang sedang login"""
+        if not self.lembaga_id: return False, "Akses ditolak. Anda belum login."
+        try:
+            res = self.supabase.table("lembaga").update({
+                "pengaturan_master": data_pengaturan
+            }).eq("id", self.lembaga_id).execute()
+
+            if res.data:
+                self.data_lembaga = res.data[0] # Segarkan memori lokal
+                return True, "Master Data berhasil disimpan ke Cloud!"
+            return False, "Gagal mengupdate database."
+        except Exception as e:
+            return False, f"Error saat menyimpan pengaturan: {e}"

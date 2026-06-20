@@ -9,6 +9,7 @@ import tab_output
 import tab_nilai
 import tab_rekap
 import tab_cetak
+import tab_master
 
 st.set_page_config(page_title="Raport MDTU", page_icon="📚", layout="wide")
 
@@ -93,11 +94,13 @@ with col_logout:
 
 st.markdown("---")
 
-t_lembaga, t_biodata, t_induk, t_nilai, t_rekap, t_cetak = st.tabs([
-    "🏛️ PROFIL LEMBAGA", "👤 TAMBAH SANTRI", "🗃️ DATA SANTRI", "📝 INPUT NILAI", "📊 REKAP NILAI", "🖨️ CETAK RAPORT"
+# Mengubah jumlah tab menjadi 7 (Menambahkan MASTER DATA di posisi kedua)
+t_lembaga, t_master, t_biodata, t_induk, t_nilai, t_rekap, t_cetak = st.tabs([
+    "🏛️ PROFIL LEMBAGA", "⚙️ MASTER DATA", "👤 TAMBAH SANTRI", "🗃️ DATA SANTRI", "📝 INPUT NILAI", "📊 REKAP NILAI", "🖨️ CETAK RAPORT"
 ])
 
 with t_lembaga: tab_lembaga.render(db)
+with t_master: tab_master.render(db)  # <-- INI BAGIAN BARU KITA
 with t_biodata: tab_biodata.render(db)
 with t_induk: tab_output.render(db)
 with t_nilai: tab_nilai.render(db)
