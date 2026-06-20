@@ -4,11 +4,11 @@ def render(db):
     st.header("📝 Input & Edit Nilai Santri")
     
     if not db.lembaga_id:
-        st.warning("⚠️ Anda belum login. Silakan login terlebih dahulu.")
+        st.warning("⚠️ Anda belum login.")
         return
 
     if not db.data_master:
-        st.warning("Belum ada data santri. Silakan isi lewat tab Input Biodata terlebih dahulu.")
+        st.warning("Belum ada data santri di madrasah ini. Silakan tambah di Tab Biodata.")
         return
         
     map_santri = {s['nama']: s['id'] for s in db.data_master}
@@ -29,25 +29,30 @@ def render(db):
     def_absen = nilai_lama['absen'] if nilai_lama else {}
     
     if nilai_lama:
-        st.info("ℹ️ Data nilai untuk semester ini sudah ada di database. Anda sedang dalam mode Edit.")
+        st.info("ℹ️ Mode Edit: Data nilai santri ini sudah ada. Mengubah data di bawah akan memodifikasi file aslinya.")
     
-    # Menarik Master Data untuk Mapel dan Kelas Tujuan
     pengaturan = db.data_lembaga.get("pengaturan_master", {})
-    list_mapel = pengaturan.get("mapel", ["AL QUR'AN", "AL HADITS", "AQIDAH", "AKHLAQ"])
-    list_kelas = pengaturan.get("kelas", ["TKA", "TPA", "MDTU"])
+    dict_mapel = pengaturan.get("mapel", {"Keagamaan": ["AL QUR'AN"]})
+    
+    # Migrasi darurat jika mapel masih list biasa
+    if isinstance(dict_mapel, list):
+        dict_mapel = {"Mata Pelajaran": dict_mapel}
+        
+    list_kelas = pengaturan.get("kelas", ["MDTU"])
 
     with st.form("form_nilai"):
         col1, col2 = st.columns(2)
         
-        # --- KIRI: NILAI AKADEMIK (DINAMIS DARI MASTER DATA) ---
+        # --- KIRI: NILAI AKADEMIK DIKELOMPOKKAN BERDASARKAN KATEGORI ---
         with col1:
-            st.subheader("Mata Pelajaran (Dinamis)")
             nilai_akademik_input = {}
-            for mapel in list_mapel:
-                val_awal = int(def_akademik.get(mapel, 0))
-                nilai_akademik_input[mapel] = st.number_input(mapel, min_value=0, max_value=100, value=val_awal, step=1)
+            for kategori, daftar_mapel in dict_mapel.items():
+                st.subheader(kategori) # Menampilkan nama kategori sebagai sub-judul
+                for mapel in daftar_mapel:
+                    val_awal = int(def_akademik.get(mapel, 0))
+                    nilai_akademik_input[mapel] = st.number_input(mapel, min_value=0, max_value=100, value=val_awal, step=1)
         
-        # --- KANAN: NON-AKADEMIK & KEPUTUSAN ---
+        # --- KANAN: NON-AKADEMIK & STATUS ---
         with col2:
             st.subheader("Kepribadian")
             c_p1, c_p2, c_p3 = st.columns(3)
@@ -66,10 +71,15 @@ def render(db):
             
             st.subheader("Keputusan & Catatan")
             stat_lama = nilai_lama.get("status", "-") if nilai_lama else "-"
-            stat_dasar = "-"
-            if "Naik" in stat_lama: stat_dasar = "Naik Kelas"
-            elif "Tinggal" in stat_lama: stat_dasar = "Tinggal di Kelas"
-            elif "LULUS" in stat_lama: stat_dasar = "LULUS"
+            stat_dasar, kelas_lama = "-", ""
+            if "Naik" in stat_lama: 
+                stat_dasar = "Naik Kelas"
+                kelas_lama = stat_lama.replace("Naik Kelas", "").strip()
+            elif "Tinggal" in stat_lama: 
+                stat_dasar = "Tinggal di Kelas"
+                kelas_lama = stat_lama.replace("Tinggal di Kelas", "").strip()
+            elif "LULUS" in stat_lama: 
+                stat_dasar = "LULUS"
 
             col_stat1, col_stat2 = st.columns(2)
             with col_stat1:
@@ -79,8 +89,9 @@ def render(db):
                 
             with col_stat2:
                 if status_pilihan in ["Naik Kelas", "Tinggal di Kelas"]:
-                    # Menggunakan Dropdown Tingkatan Kelas dari Master Data
-                    kelas_tujuan = st.selectbox("Ke/Di Kelas", list_kelas)
+                    # Menggunakan Dropdown kelas dari master data
+                    idx_kelas = list_kelas.index(kelas_lama) if kelas_lama in list_kelas else 0
+                    kelas_tujuan = st.selectbox("Ke/Di Kelas", list_kelas, index=idx_kelas)
                 else:
                     kelas_tujuan = ""
                     
@@ -90,10 +101,7 @@ def render(db):
         submitted = st.form_submit_button(teks_tombol)
         
         if submitted:
-            if status_pilihan in ["Naik Kelas", "Tinggal di Kelas"]:
-                status_final = f"{status_pilihan} {kelas_tujuan}".strip()
-            else:
-                status_final = status_pilihan
+            status_final = f"{status_pilihan} {kelas_tujuan}".strip() if status_pilihan in ["Naik Kelas", "Tinggal di Kelas"] else status_pilihan
 
             jumlah = sum(nilai_akademik_input.values())
             rata_rata = jumlah / len(nilai_akademik_input) if nilai_akademik_input else 0
