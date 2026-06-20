@@ -36,15 +36,16 @@ class DataEngine:
         return [santri["nama"] for santri in self.data_master]
 
     def simpan_lembaga(self, data):
-            """Menyimpan atau memperbarui data profil Lembaga ke Supabase"""
-            try:
-                # Kita gunakan insert, karena di muat_data() kita selalu mengambil data terakhir (desc limit 1)
-                res = self.supabase.table("lembaga").insert(data).execute()
-                if res.data:
-                    self.data_lembaga = res.data[0] # Update data di memori
-                    return True, "Data Identitas Lembaga berhasil disimpan di Cloud!"
-            except Exception as e:
-                return False, f"Gagal menyimpan data: {e}"
+        """Menyimpan atau memperbarui data profil Lembaga ke Supabase"""
+        try:
+            # Kita gunakan insert, karena di muat_data() kita selalu mengambil data terakhir (desc limit 1)
+            res = self.supabase.table("lembaga").insert(data).execute()
+            if res.data:
+                self.data_lembaga = res.data[0] # Update data di memori
+                return True, "Data Identitas Lembaga berhasil disimpan di Cloud!"
+        except Exception as e:
+            return False, f"Gagal menyimpan data: {e}"
+
     def simpan_biodata(self, no_induk, nama, data_lengkap):
         """Menyimpan biodata santri baru ke Supabase"""
         try:
@@ -60,13 +61,21 @@ class DataEngine:
         except Exception as e:
             return False, f"Gagal menyimpan biodata: {e}"
 
-    def simpan_nilai(self, data_nilai):
-        """Menyimpan data nilai, absensi, dan kepribadian santri"""
+    def simpan_nilai(self, data_nilai, id_nilai=None):
+        """Menyimpan data baru atau mengupdate data nilai yang sudah ada di Supabase"""
         try:
-            res = self.supabase.table("nilai_santri").insert(data_nilai).execute()
-            return True, "Data nilai berhasil disimpan ke Cloud!"
+            if id_nilai:
+                # Jika id_nilai diberikan, lakukan UPDATE ke baris yang sudah ada
+                res = self.supabase.table("nilai_santri").update(data_nilai).eq("id", id_nilai).execute()
+                pesan = "Data nilai berhasil diperbarui di Cloud!"
+            else:
+                # Jika tidak ada id_nilai, lakukan INSERT sebagai data baru
+                res = self.supabase.table("nilai_santri").insert(data_nilai).execute()
+                pesan = "Data nilai baru berhasil ditambahkan ke Cloud!"
+            return True, pesan
         except Exception as e:
             return False, f"Gagal menyimpan nilai: {e}"
+
     def get_nilai(self, santri_id, semester):
         """Mengambil data nilai santri berdasarkan ID dan Semester"""
         try:
@@ -77,6 +86,7 @@ class DataEngine:
         except Exception as e:
             st.error(f"Gagal mengambil data nilai: {e}")
             return None
+
     def get_ranking(self, santri_id, semester):
         """Menghitung ranking berdasarkan jumlah nilai terbesar"""
         try:
