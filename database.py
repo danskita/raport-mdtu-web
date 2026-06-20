@@ -77,3 +77,28 @@ class DataEngine:
         except Exception as e:
             st.error(f"Gagal mengambil data nilai: {e}")
             return None
+    def get_ranking(self, santri_id, semester):
+        """Menghitung ranking berdasarkan jumlah nilai terbesar"""
+        try:
+            res = self.supabase.table("nilai_santri").select("santri_id, jumlah").eq("semester", semester).execute()
+            if not res.data: return "-", 0
+            
+            # Urutkan dari jumlah nilai terbesar ke terkecil
+            data_urut = sorted(res.data, key=lambda x: x['jumlah'], reverse=True)
+            
+            rank = 1
+            for item in data_urut:
+                if item['santri_id'] == santri_id:
+                    return rank, len(data_urut)
+                rank += 1
+            return "-", len(data_urut)
+        except:
+            return "-", 0
+
+    def get_semua_nilai(self, semester):
+        """Mengambil semua data nilai untuk fitur Tabel Rekap"""
+        try:
+            res = self.supabase.table("nilai_santri").select("*").eq("semester", semester).execute()
+            return res.data if res.data else []
+        except:
+            return []
