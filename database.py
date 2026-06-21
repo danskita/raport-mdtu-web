@@ -11,45 +11,39 @@ class DataEngine:
         self.data_master = []
         self.lembaga_id = None 
         self.role = None 
-        self.list_akses_lembaga = [] # Menyimpan daftar SEMUA madrasah milik 1 email
+        self.kelas_binaan = None # Identitas pengunci kelas
+        self.list_akses_lembaga = []
         
     def get_semua_madrasah(self):
         try:
-            res = self.supabase.table("lembaga").select("id, nama_madrasah, profil_lengkap").execute()
+            res = self.supabase.table("lembaga").select("id, nama_madrasah, profil_lengkap, pengaturan_master").execute()
             return res.data if res.data else []
         except:
             return []
 
     def register_madrasah(self, email, password, nama_madrasah, nsm, tingkatan):
         try:
-            # Daftar ke sistem auth (jika email sudah ada, abaikan error auth-nya dan lanjut simpan data)
             try: self.supabase.auth.sign_up({"email": email, "password": password})
             except: pass 
             
-            # Kunci pengaturan tingkatan sejak awal mendaftar
             profil = {"tingkatan": tingkatan}
-            
             self.supabase.table("lembaga").insert({
-                "email": email,
-                "nama_madrasah": nama_madrasah,
-                "nsm": nsm,
-                "profil_lengkap": profil
+                "email": email, "nama_madrasah": nama_madrasah, "nsm": nsm, "profil_lengkap": profil
             }).execute()
             return True, "Pendaftaran Lembaga berhasil! Silakan pindah ke tab Login."
         except Exception as e:
             return False, f"Pendaftaran error: {e}"
 
-    def register_guru(self, email, password, nama_guru, list_lembaga_id):
-        """Mendaftarkan akun Guru dan menautkannya ke MAKSIMAL 3 Lembaga yang dipilih"""
+    def register_guru(self, email, password, nama_guru, lembaga_id, kelas_binaan):
         try:
             try: self.supabase.auth.sign_up({"email": email, "password": password})
             except: pass
             
-            for l_id in list_lembaga_id:
-                self.supabase.table("guru").insert({
-                    "email": email, "nama_guru": nama_guru, "lembaga_id": l_id, "role": "guru"
-                }).execute()
-            return True, "Akun Guru berhasil didaftarkan di madrasah terpilih! Silakan Login."
+            # Guru diikat ke 1 Lembaga dan 1 Kelas Binaan
+            self.supabase.table("guru").insert({
+                "email": email, "nama_guru": nama_guru, "lembaga_id": lembaga_id, "role": "guru", "kelas_binaan": kelas_binaan
+            }).execute()
+            return True, f"Akun Wali Kelas ({kelas_binaan}) berhasil didaftarkan! Silakan Login."
         except Exception as e:
             return False, f"Pendaftaran error: {e}"
 
@@ -57,11 +51,9 @@ class DataEngine:
         try:
             res = self.supabase.auth.sign_in_with_password({"email": email, "password": password})
             if res.user:
-                # 1. Cari SEMUA madrasah di mana email ini menjadi Admin
                 lembaga_res = self.supabase.table("lembaga").select("*").eq("email", email).execute()
                 admin_lembagas = lembaga_res.data if lembaga_res.data else []
 
-                # 2. Cari SEMUA madrasah di mana email ini menjadi Guru
                 guru_res = self.supabase.table("guru").select("*").eq("email", email).execute()
                 guru_lembagas = []
                 if guru_res.data:
@@ -71,30 +63,28 @@ class DataEngine:
                             l_data = l_res.data[0]
                             l_data["_role"] = "guru"
                             l_data["_nama_guru"] = g["nama_guru"]
+                            l_data["_kelas_binaan"] = g["kelas_binaan"] # Menyimpan status kelas
                             guru_lembagas.append(l_data)
 
-                # Gabungkan semua akses
                 for a in admin_lembagas:
                     a["_role"] = "admin"
+                    a["_kelas_binaan"] = None
 
                 all_lembagas = admin_lembagas + guru_lembagas
 
-                if not all_lembagas:
-                    return False, "Akun tidak terdaftar di lembaga manapun."
+                if not all_lembagas: return False, "Akun tidak terdaftar di lembaga manapun."
 
-                # Simpan list akses dan set lembaga pertama sebagai default awal
                 self.list_akses_lembaga = all_lembagas
                 self.set_active_lembaga(all_lembagas[0])
-                
                 return True, "Login berhasil!"
             return False, "Email atau Password salah."
         except Exception as e:
             return False, "Email atau Password salah!"
 
     def set_active_lembaga(self, data_lembaga):
-        """Fungsi untuk berpindah antar madrasah di dalam aplikasi"""
         self.lembaga_id = data_lembaga['id']
         self.role = data_lembaga['_role']
+        self.kelas_binaan = data_lembaga.get('_kelas_binaan')
         self.data_lembaga = data_lembaga
         self.muat_data_santri()
 
@@ -104,12 +94,18 @@ class DataEngine:
         self.data_master = []
         self.lembaga_id = None
         self.role = None
+        self.kelas_binaan = None
         self.list_akses_lembaga = []
 
     def muat_data_santri(self):
         if not self.lembaga_id: return
         try:
-            res = self.supabase.table("biodata_santri").select("*").eq("lembaga_id", self.lembaga_id).execute()
+            # PENGUNCI DATA: Jika guru, hanya tarik santri yang kelasnya cocok dari kolom JSONB
+            query = self.supabase.table("biodata_santri").select("*").eq("lembaga_id", self.lembaga_id)
+            if self.role == "guru" and self.kelas_binaan:
+                query = query.eq("data_lengkap->>kelas_santri", self.kelas_binaan)
+            
+            res = query.execute()
             self.data_master = res.data if res.data else []
         except: pass
 
@@ -168,9 +164,19 @@ class DataEngine:
     def get_ranking(self, santri_id, semester):
         if not self.lembaga_id: return "-", 0
         try:
-            res = self.supabase.table("nilai_santri").select("santri_id, jumlah").eq("semester", semester).eq("lembaga_id", self.lembaga_id).execute()
+            # Ranking juga dikunci hanya untuk satu kelas jika yang login guru
+            query = self.supabase.table("nilai_santri").select("santri_id, jumlah").eq("semester", semester).eq("lembaga_id", self.lembaga_id)
+            res = query.execute()
             if not res.data: return "-", 0
-            data_urut = sorted(res.data, key=lambda x: x['jumlah'], reverse=True)
+            
+            # Filter santri berdasarkan kelas binaan jika guru
+            if self.role == "guru" and self.kelas_binaan:
+                santri_kelas_ini = [s['id'] for s in self.data_master]
+                data_valid = [x for x in res.data if x['santri_id'] in santri_kelas_ini]
+            else:
+                data_valid = res.data
+                
+            data_urut = sorted(data_valid, key=lambda x: x['jumlah'], reverse=True)
             rank = 1
             for item in data_urut:
                 if item['santri_id'] == santri_id: return rank, len(data_urut)
