@@ -141,13 +141,54 @@ class DataEngine:
                 return True, "Master Data berhasil disimpan!"
         except Exception as e: return False, f"Gagal: {e}"
 
-    def simpan_biodata(self, no_induk, nama, data_lengkap):
+    # --- FITUR MANAJEMEN SANTRI LENGKAP (TAMBAH, EDIT, BULK, HAPUS) ---
+    def simpan_biodata(self, no_induk, nama, data_lengkap, santri_id=None):
         if not self.lembaga_id: return False, "Akses ditolak"
         try:
-            self.supabase.table("biodata_santri").insert({"lembaga_id": self.lembaga_id, "no_induk": no_induk, "nama": nama, "data_lengkap": data_lengkap}).execute()
-            self.muat_data_santri()
-            return True, "Biodata santri berhasil ditambahkan!"
+            if santri_id:
+                # Mode EDIT (Update)
+                self.supabase.table("biodata_santri").update({
+                    "no_induk": no_induk, "nama": nama, "data_lengkap": data_lengkap
+                }).eq("id", santri_id).eq("lembaga_id", self.lembaga_id).execute()
+                pesan = "Data santri berhasil diperbarui!"
+            else:
+                # Mode SIMPAN BARU (Insert)
+                self.supabase.table("biodata_santri").insert({
+                    "lembaga_id": self.lembaga_id, "no_induk": no_induk, "nama": nama, "data_lengkap": data_lengkap
+                }).execute()
+                pesan = "Biodata santri berhasil ditambahkan!"
+            
+            self.muat_data_santri() # Refresh memori
+            return True, pesan
         except Exception as e: return False, f"Gagal: {e}"
+
+    def simpan_bulk_biodata(self, list_data):
+        """Fungsi khusus untuk menyimpan data banyak sekaligus dari Excel"""
+        if not self.lembaga_id: return False, "Akses ditolak"
+        try:
+            for data in list_data:
+                data["lembaga_id"] = self.lembaga_id
+            
+            self.supabase.table("biodata_santri").insert(list_data).execute()
+            self.muat_data_santri()
+            return True, f"{len(list_data)} data santri berhasil diimpor!"
+        except Exception as e:
+            return False, f"Gagal mengimpor data: {e}"
+
+    def hapus_biodata(self, santri_id):
+        """Fungsi untuk menghapus data santri"""
+        if not self.lembaga_id: return False, "Akses ditolak"
+        try:
+            # Hapus nilai santri terlebih dahulu agar tidak error (Cascade)
+            self.supabase.table("nilai_santri").delete().eq("santri_id", santri_id).execute()
+            # Hapus data biodata
+            self.supabase.table("biodata_santri").delete().eq("id", santri_id).eq("lembaga_id", self.lembaga_id).execute()
+            
+            self.muat_data_santri()
+            return True, "Data santri beserta nilainya berhasil dihapus secara permanen!"
+        except Exception as e:
+            return False, f"Gagal menghapus: {e}"
+    # ------------------------------------------------------------------
 
     def simpan_nilai(self, data_nilai, id_nilai=None):
         if not self.lembaga_id: return False, "Akses ditolak"
