@@ -16,7 +16,8 @@ class DataEngine:
         
     def get_semua_madrasah(self):
         try:
-            res = self.supabase.table("lembaga").select("id, nama_madrasah, profil_lengkap, pengaturan_master").execute()
+            # Mengambil data lembaga (Hanya yang sudah diverifikasi Super Admin agar bisa dipilih Guru)
+            res = self.supabase.table("lembaga").select("id, nama_madrasah, profil_lengkap, pengaturan_master").eq("is_active", True).execute()
             return res.data if res.data else []
         except:
             return []
@@ -28,9 +29,13 @@ class DataEngine:
             
             profil = {"tingkatan": tingkatan}
             self.supabase.table("lembaga").insert({
-                "email": email, "nama_madrasah": nama_madrasah, "nsm": nsm, "profil_lengkap": profil
+                "email": email, 
+                "nama_madrasah": nama_madrasah, 
+                "nsm": nsm, 
+                "profil_lengkap": profil,
+                "is_active": False # <--- SINKRONISASI: STATUS AWAL DITAHAN SUPER ADMIN
             }).execute()
-            return True, "Pendaftaran Lembaga berhasil! Silakan pindah ke tab Login."
+            return True, "Pendaftaran berhasil! Akun Anda menunggu verifikasi Super Admin."
         except Exception as e:
             return False, f"Pendaftaran error: {e}"
 
@@ -74,8 +79,14 @@ class DataEngine:
 
                 if not all_lembagas: return False, "Akun tidak terdaftar di lembaga manapun."
 
-                self.list_akses_lembaga = all_lembagas
-                self.set_active_lembaga(all_lembagas[0])
+                # --- SINKRONISASI: PENGUNCI VERIFIKASI SUPER ADMIN ---
+                lembagas_aktif = [l for l in all_lembagas if l.get("is_active") == True]
+                
+                if not lembagas_aktif:
+                    return False, "⏳ Akses Ditolak: Madrasah Anda belum disetujui oleh Super Admin. Harap bersabar."
+
+                self.list_akses_lembaga = lembagas_aktif
+                self.set_active_lembaga(lembagas_aktif[0])
                 return True, "Login berhasil!"
             return False, "Email atau Password salah."
         except Exception as e:
