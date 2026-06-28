@@ -14,9 +14,18 @@ def render(db):
     santri_id = map_santri[pilih_nama]
     nilai_lama = db.get_nilai(santri_id, semester)
     
-    def_akademik = nilai_lama['akademik'] if nilai_lama else {}
-    def_pribadi = nilai_lama['kepribadian'] if nilai_lama else {}
-    def_absen = nilai_lama['absen'] if nilai_lama else {}
+    # =================================================================
+    # PERBAIKAN 1: MEMBACA DATA DARI KOLOM JSONB "KOMPONEN_NILAI"
+    # =================================================================
+    komp_lama = nilai_lama.get('komponen_nilai', {}) if nilai_lama else {}
+    
+    # Fallback (Sistem Cadangan): Jika komponen_nilai kosong, coba baca dari struktur lama
+    # Ini berguna agar nilai yang diinput sebelum kolom JSONB dibuat tidak hilang
+    def_akademik = komp_lama.get('akademik') or (nilai_lama.get('akademik', {}) if nilai_lama else {})
+    def_pribadi = komp_lama.get('kepribadian') or (nilai_lama.get('kepribadian', {}) if nilai_lama else {})
+    def_absen = komp_lama.get('absen') or (nilai_lama.get('absen', {}) if nilai_lama else {})
+    stat_lama = komp_lama.get('status') or (nilai_lama.get('status', '-') if nilai_lama else "-")
+    catatan_lama = komp_lama.get('catatan') or (nilai_lama.get('catatan', '') if nilai_lama else "")
     
     if nilai_lama: st.info("ℹ️ Mode Edit: Data nilai santri ini sudah ada.")
     
@@ -52,7 +61,6 @@ def render(db):
             with c_a3: alpa = st.number_input("Alpa", min_value=0, value=int(def_absen.get("Alpa", 0)), step=1)
             
             st.subheader("Keputusan & Catatan")
-            stat_lama = nilai_lama.get("status", "-") if nilai_lama else "-"
             stat_dasar, kelas_lama = "-", ""
             if "Naik" in stat_lama: stat_dasar = "Naik Kelas"; kelas_lama = stat_lama.replace("Naik Kelas", "").strip()
             elif "Tinggal" in stat_lama: stat_dasar = "Tinggal di Kelas"; kelas_lama = stat_lama.replace("Tinggal di Kelas", "").strip()
@@ -74,19 +82,35 @@ def render(db):
                         kelas_tujuan = st.selectbox("Ke/Di Kelas", list_kelas, index=idx_kelas)
                 else: kelas_tujuan = ""
                     
-            catatan = st.text_area("Catatan Wali Kelas", value=nilai_lama.get("catatan", "") if nilai_lama else "")
+            catatan = st.text_area("Catatan Wali Kelas", value=catatan_lama)
 
         if st.form_submit_button("🔄 Update" if nilai_lama else "🧮 Simpan Nilai"):
             status_final = f"{status_pilihan} {kelas_tujuan}".strip() if status_pilihan in ["Naik Kelas", "Tinggal di Kelas"] else status_pilihan
             jumlah = sum(nilai_akademik_input.values())
             rata_rata = jumlah / len(nilai_akademik_input) if nilai_akademik_input else 0
             
-            data_nilai = {
-                "santri_id": santri_id, "semester": semester, "akademik": nilai_akademik_input,
+            # =================================================================
+            # PERBAIKAN 2: MEMBUNGKUS DATA KE DALAM WADAH JSONB
+            # =================================================================
+            wadah_komponen = {
+                "akademik": nilai_akademik_input,
                 "kepribadian": {"Kelakuan": kelakuan, "Kerajinan": kerajinan, "Kebersihan": kebersihan},
-                "absen": {"Sakit": sakit, "Izin": izin, "Alpa": alpa}, "jumlah": jumlah, "rata_rata": rata_rata,
-                "catatan": catatan, "status": status_final
+                "absen": {"Sakit": sakit, "Izin": izin, "Alpa": alpa},
+                "catatan": catatan, 
+                "status": status_final
             }
+
+            data_nilai = {
+                "santri_id": santri_id, 
+                "semester": semester, 
+                "jumlah": jumlah, 
+                "rata_rata": rata_rata,
+                "komponen_nilai": wadah_komponen  # <--- Disimpan secara rapi ke kolom JSONB
+            }
+            
             sukses, pesan = db.simpan_nilai(data_nilai, id_nilai=nilai_lama['id'] if nilai_lama else None)
-            if sukses: st.success(pesan); st.rerun()
-            else: st.error(pesan)
+            if sukses: 
+                st.success(pesan)
+                st.rerun()
+            else: 
+                st.error(pesan)
