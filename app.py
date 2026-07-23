@@ -17,24 +17,57 @@ if 'db' not in st.session_state:
     st.session_state.db = DataEngine()
 db = st.session_state.db
 
-# --- HALAMAN LOGIN (HANYA LOGIN, TANPA REGISTER GURU) ---
+# --- HALAMAN AWAL (LOGIN & REGISTER LEMBAGA) ---
 if not db.lembaga_id:
     st.title("📚 Aplikasi Raport MDTU (Cloud Version)")
-    st.markdown("Silakan masuk menggunakan NIP/Username yang telah didaftarkan oleh Admin.")
+    st.markdown("Silakan masuk ke akun Anda atau daftarkan lembaga baru untuk menggunakan sistem.")
     
-    # Form Login Sederhana
-    with st.form("form_login"):
-        st.subheader("🔑 Form Login")
-        username = st.text_input("NIP / Username")
-        password = st.text_input("Password", type="password")
-        submit_login = st.form_submit_button("Masuk")
-        
-        if submit_login:
-            # Asumsi db.login() adalah fungsi autentikasi Anda
-            if db.login(username, password): 
-                st.rerun()
-            else:
-                st.error("Login gagal! Periksa kembali Username dan Password Anda.")
+    # Membuat Tab untuk memisahkan Login dan Pendaftaran Madrasah
+    tab_login, tab_daftar = st.tabs(["🔑 Masuk (Login)", "📝 Daftar Lembaga Baru"])
+    
+    # 1. TAB LOGIN (Untuk Admin dan Guru)
+    with tab_login:
+        st.subheader("Masuk ke Sistem")
+        with st.form("form_login"):
+            # Kotak input bisa diisi Email (untuk admin) atau NIP/Username (untuk guru)
+            username = st.text_input("Email (Admin) / NIP atau Username (Guru)")
+            password = st.text_input("Password / PIN", type="password")
+            submit_login = st.form_submit_button("Masuk")
+            
+            if submit_login:
+                sukses, pesan = db.login(username, password)
+                if sukses:
+                    st.success(pesan)
+                    st.rerun()
+                else:
+                    st.error(pesan)
+                    
+    # 2. TAB DAFTAR (Hanya untuk Lembaga/Madrasah Baru)
+    with tab_daftar:
+        st.subheader("Pendaftaran Madrasah Baru")
+        st.info("Form ini KHUSUS untuk pendaftaran Lembaga/Madrasah. Akun Guru/Wali Kelas akan dibuatkan oleh Admin Lembaga setelah login.")
+        with st.form("form_register_madrasah"):
+            nama_madrasah = st.text_input("Nama Madrasah *")
+            nsm = st.text_input("Nomor Statistik Madrasah (NSM) *")
+            tingkatan = st.selectbox("Tingkatan *", ["MDTU", "MDTA", "MDTw", "MDta"])
+            
+            st.markdown("**Kredensial Login Admin Lembaga:**")
+            email = st.text_input("Email Lembaga *")
+            password_reg = st.text_input("Password *", type="password")
+            
+            submit_register = st.form_submit_button("Daftarkan Madrasah")
+            
+            if submit_register:
+                if not email or not password_reg or not nama_madrasah:
+                    st.error("Nama Madrasah, Email, dan Password wajib diisi!")
+                else:
+                    # Memanggil fungsi register_madrasah dari database.py
+                    sukses, pesan = db.register_madrasah(email, password_reg, nama_madrasah, nsm, tingkatan)
+                    if sukses:
+                        st.success(pesan)
+                    else:
+                        st.error(pesan)
+                        
     st.stop() # Hentikan eksekusi kode di bawah jika belum login
 
 # --- HEADER UTAMA SETELAH LOGIN ---
