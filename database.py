@@ -1,5 +1,6 @@
 import streamlit as st
 from supabase import create_client, Client
+import hashlib # Modul baru untuk enkripsi password guru
 
 class DataEngine:
     def __init__(self):
@@ -39,91 +40,98 @@ class DataEngine:
         except Exception as e:
             return False, f"Pendaftaran error: {e}"
 
-    def register_guru(self, email_lembaga, pin_guru, nama_guru, kelas_binaan):
-        """Admin mendaftarkan guru dengan memberikan PIN khusus"""
-        if not self.lembaga_id: return False, "Akses ditolak. Anda harus login sebagai Admin Lembaga."
+    # --- FITUR MANAJEMEN AKUN GURU (BARU) ---
+    def tambah_akun_guru(self, nama_guru, username, password, role, kelas_binaan):
+        """Admin mendaftarkan guru/wali kelas secara manual (Tanpa perlu daftar mandiri)"""
+        if not self.lembaga_id: 
+            return False
+        
+        # Enkripsi password untuk keamanan
+        hashed_password = hashlib.sha256(password.encode()).hexdigest()
+        
+        data_baru = {
+            "lembaga_id": self.lembaga_id,
+            "nama_guru": nama_guru,
+            "username": username,
+            "password": hashed_password, 
+            "role": role,
+            "kelas_binaan": kelas_binaan if kelas_binaan and str(kelas_binaan).strip() != "" else None
+        }
+        
         try:
-            self.supabase.table("guru").insert({
-                "lembaga_id": self.lembaga_id, 
-                "nama_guru": nama_guru, 
-                "kelas_binaan": kelas_binaan,
-                "pin_guru": pin_guru
-            }).execute()
-            return True, f"Wali Kelas {kelas_binaan} ({nama_guru}) berhasil didaftarkan dengan PIN: {pin_guru}"
+            res = self.supabase.table("guru").insert(data_baru).execute()
+            return True if res.data else False
         except Exception as e:
-            return False, f"Gagal mendaftarkan guru: {e}"
+            print(f"Error pada tambah_akun_guru: {e}")
+            return False
 
-    def login_guru_dengan_pin(self, email_lembaga, kelas_binaan, pin_guru):
-        """Login khusus Guru menggunakan Email Madrasah + Kelas + PIN"""
+    def get_semua_guru_lembaga(self):
+        """Mengambil daftar seluruh guru di lembaga yang sedang aktif"""
+        if not self.lembaga_id: 
+            return []
         try:
-            # 1. Cari dulu data lembaga berdasarkan email
-            lembaga_res = self.supabase.table("lembaga").select("*").eq("email", email_lembaga).execute()
-            if not lembaga_res.data:
-                return False, "Email Lembaga tidak ditemukan."
+            res = self.supabase.table("guru").select("*").eq("lembaga_id", self.lembaga_id).execute()
+            return res.data if res.data else []
+        except Exception as e:
+            print("Error get_semua_guru_lembaga:", e)
+            return []
+
+    # --- SISTEM LOGIN TERPUSAT ---
+    def login(self, identitas, password):
+        """Menangani Login Admin (Email) maupun Guru (Username/NIP)"""
+        try:
+            # 1. Cek apakah ini login Guru/Wali Kelas (menggunakan tabel 'guru' & enkripsi password)
+            hashed_password = hashlib.sha256(password.encode()).hexdigest()
+            guru_res = self.supabase.table("guru").select("*").eq("username", identitas).eq("password", hashed_password).execute()
             
-            l_data = lembaga_res.data[0]
-            if not l_data.get("is_active"):
-                return False, "Madrasah ini belum disetujui oleh Super Admin."
-            
-            # 2. Cek apakah ada guru dengan kelas dan pin yang cocok di lembaga tersebut
-            guru_res = self.supabase.table("guru").select("*").eq("lembaga_id", l_data["id"]).eq("kelas_binaan", kelas_binaan).eq("pin_guru", pin_guru).execute()
-            
-            if not guru_res.data:
-                return False, "Kelas Binaan atau PIN Akses Salah!"
+            if guru_res.data:
+                g_data = guru_res.data[0]
                 
-            g_data = guru_res.data[0]
-            
-            # 3. Set sesi aktif untuk guru
-            l_data["_role"] = "guru"
-            l_data["_nama_guru"] = g_data["nama_guru"]
-            l_data["_kelas_binaan"] = g_data["kelas_binaan"]
-            
-            self.list_akses_lembaga = [l_data]
-            self.set_active_lembaga(l_data)
-            return True, f"Selamat datang, Wali Kelas {kelas_binaan} ({g_data['nama_guru']})!"
-            
-        except Exception as e:
-            return False, f"Terjadi kesalahan saat login: {e}"
+                # Tarik data lembaga yang menaungi guru tersebut
+                l_res = self.supabase.table("lembaga").select("*").eq("id", g_data["lembaga_id"]).execute()
+                if not l_res.data:
+                    return False, "Data lembaga tidak ditemukan."
+                
+                l_data = l_res.data[0]
+                if not l_data.get("is_active"):
+                    return False, "⏳ Akses Ditolak: Madrasah Anda telah ditangguhkan/belum disetujui Super Admin."
+                
+                # Set sesi untuk guru/wali kelas
+                l_data["_role"] = g_data.get("role", "guru")
+                l_data["_nama_guru"] = g_data["nama_guru"]
+                l_data["_kelas_binaan"] = g_data.get("kelas_binaan")
+                
+                self.list_akses_lembaga = [l_data]
+                self.set_active_lembaga(l_data)
+                return True, f"Selamat datang, {g_data['nama_guru']}!"
 
-    def login(self, email, password):
-        try:
-            res = self.supabase.auth.sign_in_with_password({"email": email, "password": password})
-            if res.user:
-                lembaga_res = self.supabase.table("lembaga").select("*").eq("email", email).execute()
-                admin_lembagas = lembaga_res.data if lembaga_res.data else []
-
-                guru_res = self.supabase.table("guru").select("*").eq("email", email).execute()
-                guru_lembagas = []
-                if guru_res.data:
-                    for g in guru_res.data:
-                        l_res = self.supabase.table("lembaga").select("*").eq("id", g["lembaga_id"]).execute()
-                        if l_res.data:
-                            l_data = l_res.data[0]
-                            l_data["_role"] = "guru"
-                            l_data["_nama_guru"] = g["nama_guru"]
-                            l_data["_kelas_binaan"] = g["kelas_binaan"] # Menyimpan status kelas
-                            guru_lembagas.append(l_data)
-
-                for a in admin_lembagas:
-                    a["_role"] = "admin"
-                    a["_kelas_binaan"] = None
-
-                all_lembagas = admin_lembagas + guru_lembagas
-
-                if not all_lembagas: return False, "Akun tidak terdaftar di lembaga manapun."
-
-                # --- SINKRONISASI: PENGUNCI VERIFIKASI SUPER ADMIN ---
-                lembagas_aktif = [l for l in all_lembagas if l.get("is_active") == True]
+            # 2. Jika bukan guru, cek apakah ini login Admin Lembaga (via Supabase Auth - Email)
+            auth_res = self.supabase.auth.sign_in_with_password({"email": identitas, "password": password})
+            if auth_res.user:
+                lembaga_res = self.supabase.table("lembaga").select("*").eq("email", identitas).execute()
+                if not lembaga_res.data:
+                    return False, "Akun Admin tidak memiliki data lembaga terdaftar."
+                
+                admin_lembagas = lembaga_res.data
+                lembagas_aktif = [l for l in admin_lembagas if l.get("is_active") == True]
                 
                 if not lembagas_aktif:
                     return False, "⏳ Akses Ditolak: Madrasah Anda belum disetujui oleh Super Admin. Harap bersabar."
-
+                
+                # Set sesi untuk Admin Lembaga
+                for a in lembagas_aktif:
+                    a["_role"] = "admin"
+                    a["_kelas_binaan"] = None
+                    
                 self.list_akses_lembaga = lembagas_aktif
                 self.set_active_lembaga(lembagas_aktif[0])
-                return True, "Login berhasil!"
-            return False, "Email atau Password salah."
+                return True, "Login Admin berhasil!"
+
+            return False, "NIP/Username/Email atau Password salah."
+            
         except Exception as e:
-            return False, "Email atau Password salah!"
+            # Cegah error crash jika sign_in_with_password gagal (karena format email tidak valid dsb)
+            return False, "Login gagal! Periksa kembali kredensial Anda."
 
     def set_active_lembaga(self, data_lembaga):
         self.lembaga_id = data_lembaga['id']
@@ -133,7 +141,10 @@ class DataEngine:
         self.muat_data_santri()
 
     def logout(self):
-        self.supabase.auth.sign_out()
+        try:
+            self.supabase.auth.sign_out()
+        except:
+            pass
         self.data_lembaga = {}
         self.data_master = []
         self.lembaga_id = None
@@ -144,9 +155,9 @@ class DataEngine:
     def muat_data_santri(self):
         if not self.lembaga_id: return
         try:
-            # PENGUNCI DATA: Jika guru, hanya tarik santri yang kelasnya cocok dari kolom JSONB
+            # PENGUNCI DATA: Jika wali kelas, hanya tarik santri yang kelasnya cocok dari kolom JSONB
             query = self.supabase.table("biodata_santri").select("*").eq("lembaga_id", self.lembaga_id)
-            if self.role == "guru" and self.kelas_binaan:
+            if self.role == "wali_kelas" and self.kelas_binaan:
                 query = query.eq("data_lengkap->>kelas_santri", self.kelas_binaan)
             
             res = query.execute()
@@ -249,13 +260,13 @@ class DataEngine:
     def get_ranking(self, santri_id, semester):
         if not self.lembaga_id: return "-", 0
         try:
-            # Ranking juga dikunci hanya untuk satu kelas jika yang login guru
+            # Ranking juga dikunci hanya untuk satu kelas jika yang login wali kelas
             query = self.supabase.table("nilai_santri").select("santri_id, jumlah").eq("semester", semester).eq("lembaga_id", self.lembaga_id)
             res = query.execute()
             if not res.data: return "-", 0
             
-            # Filter santri berdasarkan kelas binaan jika guru
-            if self.role == "guru" and self.kelas_binaan:
+            # Filter santri berdasarkan kelas binaan jika wali kelas
+            if self.role == "wali_kelas" and self.kelas_binaan:
                 santri_kelas_ini = [s['id'] for s in self.data_master]
                 data_valid = [x for x in res.data if x['santri_id'] in santri_kelas_ini]
             else:
