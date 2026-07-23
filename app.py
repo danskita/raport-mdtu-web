@@ -1,125 +1,131 @@
 import streamlit as st
-import time
+import pandas as pd
 from database import DataEngine
 
 import tab_lembaga
 import tab_master
 import tab_biodata
-import tab_nilai
 import tab_output
 import tab_absen
-import tab_rekap
+import tab_nilai
 import tab_cetak
 
 st.set_page_config(page_title="Raport MDTU", page_icon="📚", layout="wide")
 
-if 'db' not in st.session_state: st.session_state.db = DataEngine()
-db = st.session_state.db
-if 'logged_in' not in st.session_state: st.session_state.logged_in = False
+# --- INISIALISASI SESSION STATE ---
+if 'db' not in st.session_state:
+    st.session_state.db = DataEngine()
 
-if not st.session_state.logged_in:
-    st.title("📚 Platform Raport Keagamaan Nasional")
-    tab_login, tab_register = st.tabs(["🔐 Login Sistem", "📝 Daftar Akun Baru"])
+db = st.session_state.db
+
+# --- HALAMAN LOGIN / REGISTER (JIKA BELUM LOGIN) ---
+if not db.lembaga_id:
+    st.title("📚 Aplikasi Raport MDTU (Cloud Version)")
+    st.markdown("Silakan masuk atau daftarkan lembaga/guru Anda untuk mengakses sistem.")
     
-    with tab_login:
+    menu_auth = st.radio("Pilih Aksi:", ["Masuk (Login)", "Daftar Madrasah Baru", "Daftar Akun Guru"], horizontal=True)
+    st.markdown("---")
+    
+    if menu_auth == "Masuk (Login)":
         with st.form("form_login"):
-            email = st.text_input("Email")
+            email = st.text_input("Alamat Email")
             password = st.text_input("Password", type="password")
-            if st.form_submit_button("Masuk Aplikasi"):
-                with st.spinner("Mencocokkan kredensial..."):
-                    sukses, pesan = db.login(email, password)
-                    if sukses:
-                        st.success(f"✅ {pesan}")
-                        time.sleep(1) 
-                        st.session_state.logged_in = True
-                        st.rerun() 
-                    else: st.error(pesan)
-                        
-    with tab_register:
-        tipe_akun = st.radio("Mendaftar Sebagai:", ["Lembaga (Kepala Sekolah/Admin)", "Wali Kelas (Guru)"], horizontal=True)
-        st.markdown("---")
-        
-        if tipe_akun == "Lembaga (Kepala Sekolah/Admin)":
-            with st.form("form_register_lembaga"):
-                new_email = st.text_input("Email Lembaga")
-                new_pass = st.text_input("Buat Password", type="password")
-                tingkatan = st.selectbox("Tingkatan Lembaga", ["MDTU", "TKA", "TPA", "Lainnya"])
-                new_nama = st.text_input("Nama Lembaga (Contoh: Al-Ikhlas)")
-                new_nsm = st.text_input("Nomor Statistik (NSM)")
-                if st.form_submit_button("Daftarkan Madrasah"):
-                    if not new_email or not new_nama or len(new_pass) < 6: st.warning("Mohon lengkapi form!")
-                    else:
-                        nama_final = f"{tingkatan} {new_nama}" if tingkatan != "Lainnya" else new_nama
-                        sukses, pesan = db.register_madrasah(new_email, new_pass, nama_final, new_nsm, tingkatan)
-                        if sukses:
-                            st.success(pesan); st.balloons(); time.sleep(2)
-                        else: st.error(pesan)
-        else:
-            list_lembaga = db.get_semua_madrasah()
-            if not list_lembaga: st.warning("Belum ada madrasah terdaftar.")
-            else:
-                # Opsi Pilih Lembaga (Di luar form agar dropdown kelas bisa dinamis)
-                opsi_lembaga = {f"{m['nama_madrasah']} ({m.get('profil_lengkap',{}).get('tingkatan','')})": m for m in list_lembaga}
-                pilihan_nama = st.selectbox("1. Pilih Madrasah Tempat Anda Mengajar", list(opsi_lembaga.keys()))
-                lembaga_terpilih = opsi_lembaga[pilihan_nama]
-                
-                # Baca pengaturan kelas dari lembaga terpilih
-                list_kelas = lembaga_terpilih.get("pengaturan_master", {}).get("kelas", ["Kelas belum diatur"])
-                kelas_binaan = st.selectbox("2. Pilih Kelas Binaan Anda", list_kelas)
-                
-                with st.form("form_register_guru"):
-                    guru_email = st.text_input("Email Pribadi (Wajib)")
-                    guru_pass = st.text_input("Buat Password", type="password")
-                    guru_nama = st.text_input("Nama Lengkap")
+            submit_login = st.form_submit_button("Masuk Sistem", type="primary")
+            
+            if submit_login:
+                sukses, pesan = db.login(email, password)
+                if sukses:
+                    st.success(pesan)
+                    st.rerun()
+                else:
+                    st.error(pesan)
                     
-                    if st.form_submit_button("Daftarkan Akun Wali Kelas"):
-                        if not guru_email or not guru_nama or len(guru_pass) < 6: st.warning("Lengkapi data!")
+    elif menu_auth == "Daftar Madrasah Baru":
+        with st.form("form_reg_madrasah"):
+            st.subheader("Registrasi Madrasah / Lembaga Baru")
+            email = st.text_input("Email Admin/Lembaga")
+            password = st.text_input("Password", type="password")
+            nama_madrasah = st.text_input("Nama Madrasah")
+            nsm = st.text_input("NSM / Nomor Statistik")
+            tingkatan = st.selectbox("Tingkatan Lembaga", ["TKA", "TPA", "MDTU", "Lainnya"])
+            
+            submit_reg = st.form_submit_button("Daftarkan Madrasah", type="primary")
+            if submit_reg:
+                if not email or not password or not nama_madrasah:
+                    st.error("Semua kolom wajib diisi!")
+                else:
+                    sukses, pesan = db.register_madrasah(email, password, nama_madrasah, nsm, tingkatan)
+                    if sukses:
+                        st.success(pesan)
+                    else:
+                        st.error(pesan)
+                        
+    elif menu_auth == "Daftar Akun Guru":
+        with st.form("form_reg_guru"):
+            st.subheader("Registrasi Akun Wali Kelas / Guru")
+            list_madrasah = db.get_semua_madrasah()
+            
+            if not list_madrasah:
+                st.warning("Belum ada madrasah aktif yang terdaftar di sistem.")
+            else:
+                map_m = {m['nama_madrasah']: m['id'] for m in list_madrasah}
+                pilih_m = st.selectbox("Pilih Madrasah Tempat Mengajar", list(map_m.keys()))
+                
+                email_g = st.text_input("Email Guru")
+                pass_g = st.text_input("Password", type="password")
+                nama_g = st.text_input("Nama Lengkap Guru")
+                kelas_g = st.text_input("Kelas Binaan (Contoh: Kelas 1 atau TKA A)")
+                
+                submit_reg_g = st.form_submit_button("Daftarkan Akun Guru", type="primary")
+                if submit_reg_g:
+                    if not email_g or not pass_g or not nama_g or not kelas_g:
+                        st.error("Semua kolom wajib diisi!")
+                    else:
+                        sukses, pesan = db.register_guru(email_g, pass_g, nama_g, map_m[pilih_m], kelas_g)
+                        if sukses:
+                            st.success(pesan)
                         else:
-                            with st.spinner("Mendaftarkan..."):
-                                sukses, pesan = db.register_guru(guru_email, guru_pass, guru_nama, lembaga_terpilih['id'], kelas_binaan)
-                                if sukses:
-                                    st.success(pesan); st.balloons(); time.sleep(2)
-                                else: st.error(pesan)
+                            st.error(pesan)
     st.stop()
 
-# ================= DASHBOARD UTAMA =================
+# --- HEADER UTAMA SETELAH LOGIN ---
+st.sidebar.title(f"🏫 {db.data_lembaga.get('nama_madrasah', 'Madrasah')}")
+st.sidebar.write(f"**Login sebagai:** {db.role.upper()} {f'({db.kelas_binaan})' if db.kelas_binaan else ''}")
+
+# Fitur Switch Akun jika memiliki lebih dari 1 akses lembaga
 if len(db.list_akses_lembaga) > 1:
-    st.sidebar.markdown("### 🔄 Ganti Akses")
-    opsi_akses = {f"{l['nama_madrasah']} ({l['_role'].upper()})" : l for l in db.list_akses_lembaga}
-    nama_aktif_sekarang = f"{db.data_lembaga['nama_madrasah']} ({db.role.upper()})"
-    idx_aktif = list(opsi_akses.keys()).index(nama_aktif_sekarang) if nama_aktif_sekarang in opsi_akses else 0
-    madrasah_aktif = st.sidebar.selectbox("Beralih Akun:", list(opsi_akses.keys()), index=idx_aktif)
-    if db.lembaga_id != opsi_akses[madrasah_aktif]['id']:
-        db.set_active_lembaga(opsi_akses[madrasah_aktif])
+    st.sidebar.markdown("---")
+    st.sidebar.subheader("🔄 Ganti Madrasah")
+    pilihan_lembaga = {l['nama_madrasah']: l for l in db.list_akses_lembaga}
+    pilih_aktif = st.sidebar.selectbox("Pilih Lembaga Aktif", list(pilihan_lembaga.keys()))
+    if pilihan_lembaga[pilih_aktif]['id'] != db.lembaga_id:
+        db.set_active_lembaga(pilihan_lembaga[pilih_aktif])
         st.rerun()
 
-info_hak_akses = f"**{db.role.upper()}**"
-if db.role == "guru": info_hak_akses += f" (Wali {db.kelas_binaan})"
+st.sidebar.markdown("---")
+if st.sidebar.button("🚪 Keluar (Logout)", use_container_width=True):
+    db.logout()
+    st.rerun()
 
-col_judul, col_logout = st.columns([8, 2])
-with col_judul: st.title(f"🏫 Dashboard: {db.data_lembaga.get('nama_madrasah', 'Madrasah Anda')}")
-with col_logout:
-    st.write(f"Akses: {info_hak_akses}")
-    if st.button("🚪 Keluar", width='stretch'):
-        db.logout(); st.session_state.logged_in = False; st.rerun()
+st.title("📚 Aplikasi Raport MDTU (Cloud Version)")
 st.markdown("---")
 
-if db.role == "guru":
-    t_biodata, t_induk, t_nilai, t_rekap, t_cetak = st.tabs(["👤 TAMBAH SANTRI", "🗃️ DATA SANTRI", "📝 INPUT NILAI", "📊 REKAP NILAI", "🖨️ CETAK RAPORT"])
-    with t_biodata: tab_biodata.render(db)
-    with t_induk: tab_output.render(db)
-    with t_nilai: tab_nilai.render(db)
-    with t_rekap: tab_rekap.render(db)
-    with t_cetak: tab_cetak.render(db)
-else:
-    t_lembaga, t_master, t_biodata, t_induk, t_absen, t_nilai, t_cetak = st.tabs([
-            "🏛️ PROFIL LEMBAGA", "⚙️ MASTER DATA", "👤 BIODATA", "🗃️ INDUK", "📅 ABSENSI", "📝 NILAI", "🖨️ CETAK"
-        ])
-        
-        with t_lembaga: tab_lembaga.render(db)
-        with t_master: tab_master.render(db)
-        with t_biodata: tab_biodata.render(db)
-        with t_induk: tab_output.render(db)
-        with t_absen: tab_absen.render(db) # <--- TAMBAHAN BARU
-        with t_nilai: tab_nilai.render(db)
-        with t_cetak: tab_cetak.render(db)
+# --- NAVIGASI TAB UTAMA ---
+t_lembaga, t_master, t_biodata, t_induk, t_absen, t_nilai, t_cetak = st.tabs([
+    "🏛️ PROFIL", "⚙️ MASTER", "👤 BIODATA", "🗃️ INDUK", "📅 ABSENSI", "📝 NILAI", "🖨️ CETAK"
+])
+
+with t_lembaga: 
+    tab_lembaga.render(db)
+with t_master: 
+    tab_master.render(db)
+with t_biodata: 
+    tab_biodata.render(db)
+with t_induk: 
+    tab_output.render(db)
+with t_absen: 
+    tab_absen.render(db)
+with t_nilai: 
+    tab_nilai.render(db)
+with t_cetak: 
+    tab_cetak.render(db)
