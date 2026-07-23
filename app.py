@@ -5,8 +5,9 @@ from database import DataEngine
 import tab_lembaga
 import tab_master
 import tab_biodata
-import tab_output
 import tab_nilai
+import tab_output
+import tab_absen
 import tab_rekap
 import tab_cetak
 
@@ -111,11 +112,14 @@ if db.role == "guru":
     with t_rekap: tab_rekap.render(db)
     with t_cetak: tab_cetak.render(db)
 else:
-    t_lembaga, t_master, t_biodata, t_induk, t_nilai, t_rekap, t_cetak = st.tabs(["🏛️ LEMBAGA", "⚙️ MASTER DATA", "👤 TAMBAH SANTRI", "🗃️ DATA SANTRI", "📝 INPUT NILAI", "📊 REKAP NILAI", "🖨️ CETAK RAPORT"])
-    with t_lembaga: tab_lembaga.render(db)
-    with t_master: tab_master.render(db)
-    with t_biodata: tab_biodata.render(db)
-    with t_induk: tab_output.render(db)
-    with t_nilai: tab_nilai.render(db)
-    with t_rekap: tab_rekap.render(db)
-    with t_cetak: tab_cetak.render(db)
+    t_lembaga, t_master, t_biodata, t_induk, t_absen, t_nilai, t_cetak = st.tabs([
+            "🏛️ PROFIL LEMBAGA", "⚙️ MASTER DATA", "👤 BIODATA", "🗃️ INDUK", "📅 ABSENSI", "📝 NILAI", "🖨️ CETAK"
+        ])
+        
+        with t_lembaga: tab_lembaga.render(db)
+        with t_master: tab_master.render(db)
+        with t_biodata: tab_biodata.render(db)
+        with t_induk: tab_output.render(db)
+        with t_absen: tab_absen.render(db) # <--- TAMBAHAN BARU
+        with t_nilai: tab_nilai.render(db)
+        with t_cetak: tab_cetak.render(db)

@@ -235,3 +235,40 @@ class DataEngine:
                 rank += 1
             return "-", len(data_urut)
         except: return "-", 0
+    def get_absensi_harian(self, tanggal):
+        if not self.lembaga_id: return {}
+        try:
+            # Mengambil data absensi pada tanggal tertentu
+            res = self.supabase.table("absensi_harian").select("*").eq("lembaga_id", self.lembaga_id).eq("tanggal", str(tanggal)).execute()
+            # Ubah menjadi kamus {santri_id: status} untuk mempermudah UI
+            if res.data:
+                return {item['santri_id']: item['status'] for item in res.data}
+            return {}
+        except: return {}
+
+    def simpan_absensi_harian(self, tanggal, dict_absen):
+        if not self.lembaga_id: return False, "Akses ditolak"
+        try:
+            list_santri_id = list(dict_absen.keys())
+            if not list_santri_id: return True, "Tidak ada data disimpan"
+
+            # Hapus data absensi tanggal ini KHUSUS untuk santri-santri yang diabsen
+            self.supabase.table("absensi_harian").delete().eq("lembaga_id", self.lembaga_id).eq("tanggal", str(tanggal)).in_("santri_id", list_santri_id).execute()
+
+            # Siapkan data baru
+            data_insert = []
+            for santri_id, status in dict_absen.items():
+                data_insert.append({
+                    "lembaga_id": self.lembaga_id,
+                    "santri_id": santri_id,
+                    "tanggal": str(tanggal),
+                    "status": status
+                })
+            
+            # Masukkan ke database
+            if data_insert:
+                self.supabase.table("absensi_harian").insert(data_insert).execute()
+                
+            return True, "Absensi harian berhasil disimpan!"
+        except Exception as e:
+            return False, f"Gagal menyimpan absen: {e}"
