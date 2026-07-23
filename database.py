@@ -39,18 +39,51 @@ class DataEngine:
         except Exception as e:
             return False, f"Pendaftaran error: {e}"
 
-    def register_guru(self, email, password, nama_guru, lembaga_id, kelas_binaan):
+    def register_guru(self, email_lembaga, pin_guru, nama_guru, kelas_binaan):
+        """Admin mendaftarkan guru dengan memberikan PIN khusus"""
+        if not self.lembaga_id: return False, "Akses ditolak. Anda harus login sebagai Admin Lembaga."
         try:
-            try: self.supabase.auth.sign_up({"email": email, "password": password})
-            except: pass
-            
-            # Guru diikat ke 1 Lembaga dan 1 Kelas Binaan
             self.supabase.table("guru").insert({
-                "email": email, "nama_guru": nama_guru, "lembaga_id": lembaga_id, "role": "guru", "kelas_binaan": kelas_binaan
+                "lembaga_id": self.lembaga_id, 
+                "nama_guru": nama_guru, 
+                "kelas_binaan": kelas_binaan,
+                "pin_guru": pin_guru
             }).execute()
-            return True, f"Akun Wali Kelas ({kelas_binaan}) berhasil didaftarkan! Silakan Login."
+            return True, f"Wali Kelas {kelas_binaan} ({nama_guru}) berhasil didaftarkan dengan PIN: {pin_guru}"
         except Exception as e:
-            return False, f"Pendaftaran error: {e}"
+            return False, f"Gagal mendaftarkan guru: {e}"
+
+    def login_guru_dengan_pin(self, email_lembaga, kelas_binaan, pin_guru):
+        """Login khusus Guru menggunakan Email Madrasah + Kelas + PIN"""
+        try:
+            # 1. Cari dulu data lembaga berdasarkan email
+            lembaga_res = self.supabase.table("lembaga").select("*").eq("email", email_lembaga).execute()
+            if not lembaga_res.data:
+                return False, "Email Lembaga tidak ditemukan."
+            
+            l_data = lembaga_res.data[0]
+            if not l_data.get("is_active"):
+                return False, "Madrasah ini belum disetujui oleh Super Admin."
+            
+            # 2. Cek apakah ada guru dengan kelas dan pin yang cocok di lembaga tersebut
+            guru_res = self.supabase.table("guru").select("*").eq("lembaga_id", l_data["id"]).eq("kelas_binaan", kelas_binaan).eq("pin_guru", pin_guru).execute()
+            
+            if not guru_res.data:
+                return False, "Kelas Binaan atau PIN Akses Salah!"
+                
+            g_data = guru_res.data[0]
+            
+            # 3. Set sesi aktif untuk guru
+            l_data["_role"] = "guru"
+            l_data["_nama_guru"] = g_data["nama_guru"]
+            l_data["_kelas_binaan"] = g_data["kelas_binaan"]
+            
+            self.list_akses_lembaga = [l_data]
+            self.set_active_lembaga(l_data)
+            return True, f"Selamat datang, Wali Kelas {kelas_binaan} ({g_data['nama_guru']})!"
+            
+        except Exception as e:
+            return False, f"Terjadi kesalahan saat login: {e}"
 
     def login(self, email, password):
         try:
@@ -235,6 +268,7 @@ class DataEngine:
                 rank += 1
             return "-", len(data_urut)
         except: return "-", 0
+        
     def get_absensi_harian(self, tanggal):
         if not self.lembaga_id: return {}
         try:

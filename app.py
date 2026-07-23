@@ -60,32 +60,26 @@ if not db.lembaga_id:
                     else:
                         st.error(pesan)
                         
-    elif menu_auth == "Daftar Akun Guru":
-        with st.form("form_reg_guru"):
-            st.subheader("Registrasi Akun Wali Kelas / Guru")
-            list_madrasah = db.get_semua_madrasah()
+    elif menu_auth == "Masuk sebagai Wali Kelas (via PIN)":
+        with st.form("form_login_guru"):
+            st.subheader("Login Wali Kelas dengan PIN Khusus")
+            st.info("Masukkan Email Madrasah tempat Anda mengajar, Kelas Binaan Anda, dan PIN yang diberikan oleh Admin Madrasah.")
             
-            if not list_madrasah:
-                st.warning("Belum ada madrasah aktif yang terdaftar di sistem.")
-            else:
-                map_m = {m['nama_madrasah']: m['id'] for m in list_madrasah}
-                pilih_m = st.selectbox("Pilih Madrasah Tempat Mengajar", list(map_m.keys()))
-                
-                email_g = st.text_input("Email Guru")
-                pass_g = st.text_input("Password", type="password")
-                nama_g = st.text_input("Nama Lengkap Guru")
-                kelas_g = st.text_input("Kelas Binaan (Contoh: Kelas 1 atau TKA A)")
-                
-                submit_reg_g = st.form_submit_button("Daftarkan Akun Guru", type="primary")
-                if submit_reg_g:
-                    if not email_g or not pass_g or not nama_g or not kelas_g:
-                        st.error("Semua kolom wajib diisi!")
+            email_lembaga = st.text_input("Email Lembaga / Madrasah")
+            kelas_binaan = st.text_input("Kelas Binaan Anda (Contoh: Kelas 1)")
+            pin_guru = st.text_input("PIN Khusus dari Admin", type="password")
+            
+            submit_login_g = st.form_submit_button("Masuk ke Kelas", type="primary")
+            if submit_login_g:
+                if not email_lembaga or not kelas_binaan or not pin_guru:
+                    st.error("Semua kolom wajib diisi!")
+                else:
+                    sukses, pesan = db.login_guru_dengan_pin(email_lembaga, kelas_binaan, pin_guru)
+                    if sukses:
+                        st.success(pesan)
+                        st.rerun()
                     else:
-                        sukses, pesan = db.register_guru(email_g, pass_g, nama_g, map_m[pilih_m], kelas_g)
-                        if sukses:
-                            st.success(pesan)
-                        else:
-                            st.error(pesan)
+                        st.error(pesan)
     st.stop()
 
 # --- HEADER UTAMA SETELAH LOGIN ---
