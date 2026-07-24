@@ -38,13 +38,14 @@ def render(db):
                     elif role == "wali_kelas" and not kelas_binaan:
                         st.error("❌ Kelas Binaan wajib diisi untuk seorang Wali Kelas!")
                     else:
-                        # Memanggil fungsi ke database.py
-                        sukses = db.tambah_akun_guru(nama_guru, username, password, role, kelas_binaan)
+                        # --- PERBAIKAN DI SINI: MENANGKAP 2 NILAI (SUKSES & PESAN) ---
+                        sukses, pesan = db.tambah_akun_guru(nama_guru, username, password, role, kelas_binaan)
+                        
                         if sukses:
-                            st.success(f"✅ Berhasil! Akun untuk {nama_guru} telah ditambahkan.")
+                            st.success(pesan)
                             st.rerun()
                         else:
-                            st.error("❌ Gagal menambahkan data. Pastikan Username/NIP belum digunakan oleh orang lain.")
+                            st.error(pesan) # Menampilkan error asli dari database
     else:
         st.info("🔒 Hanya Admin Lembaga yang berhak menambahkan akun guru baru.")
 
