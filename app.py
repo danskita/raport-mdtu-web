@@ -49,7 +49,7 @@ if not db.lembaga_id:
         with st.form("form_register_madrasah"):
             nama_madrasah = st.text_input("Nama Madrasah *")
             nsm = st.text_input("Nomor Statistik Madrasah (NSM) *")
-            tingkatan = st.selectbox("Tingkatan *", ["MDTU", "MDTA", "MDTw", "MDta"])
+            tingkatan = st.selectbox("Tingkatan *", ["TKA", "TPA", "MDTU"])
             
             st.markdown("**Kredensial Login Admin Lembaga:**")
             email = st.text_input("Email Lembaga *")
