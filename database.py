@@ -46,15 +46,15 @@ class DataEngine:
     def tambah_akun_guru(self, nama_guru, username, password, role, kelas_binaan):
         """Admin mendaftarkan guru/wali kelas secara manual"""
         if not self.lembaga_id: 
-            return False
+            return False, "❌ Akses ditolak: Identitas lembaga tidak ditemukan."
         
-        # Enkripsi password untuk keamanan
+        # Enkripsi password
         hashed_password = hashlib.sha256(password.encode()).hexdigest()
         
         data_baru = {
             "lembaga_id": self.lembaga_id,
             "nama_guru": nama_guru,
-            "username": username,
+            "username": username.strip(),
             "password": hashed_password, 
             "role": role,
             "kelas_binaan": kelas_binaan if kelas_binaan and str(kelas_binaan).strip() != "" else None
@@ -62,10 +62,11 @@ class DataEngine:
         
         try:
             res = self.supabase.table("guru").insert(data_baru).execute()
-            return True if res.data else False
+            if res.data:
+                return True, f"✅ Berhasil! Akun untuk {nama_guru} telah ditambahkan."
+            return False, "❌ Gagal menyimpan data ke database."
         except Exception as e:
-            print(f"Error pada tambah_akun_guru: {e}")
-            return False
+            return False, f"❌ Error Database: {e}"
 
     def get_semua_guru_lembaga(self):
         """Mengambil daftar seluruh guru di lembaga yang sedang aktif"""
