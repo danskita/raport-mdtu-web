@@ -22,7 +22,7 @@ def render(db):
 
     st.markdown("---")
     
-    # MEMBUAT 3 SUB-TAB UTAMA
+    # MEMBUAT 3 SUB-TAB UTAMA (Pengganti Tkinter tab_pratinjau_utama)
     sub_cover, sub_ganjil, sub_genap = st.tabs([
         "📔 Cover Raport", "📘 Semester 1 (Ganjil)", "📗 Semester 2 (Genap)"
     ])
@@ -55,8 +55,10 @@ def render(db):
     # 2. TAB SEMESTER 1 (GANJIL)
     # ========================================
     with sub_ganjil:
+        nilai_g = db.get_nilai(santri['id'], 1)
+        
         if st.button("⚙️ Buat Preview Ganjil", key="btn_ganjil"):
-            if not db.get_nilai(santri['id'], 1):
+            if not nilai_g:
                 st.error(f"❌ {pilih_nama} belum memiliki data nilai untuk Semester Ganjil.")
                 st.session_state.pdf_ganjil = None
             else:
@@ -66,14 +68,17 @@ def render(db):
         if 'pdf_ganjil' in st.session_state and st.session_state.pdf_ganjil:
             st.download_button("⬇️ Download Raport Ganjil (PDF)", data=st.session_state.pdf_ganjil, file_name=f"Raport_Ganjil_{pilih_nama}.pdf", mime="application/pdf")
             
-            # --- TAMPILAN RINGKAS UNTUK HP ---
-            nilai_g = db.get_nilai(santri['id'], 1)
+            # --- TAMPILAN RINGKAS UNTUK HP (SUDAH DISESUAIKAN DENGAN JSONB) ---
             if nilai_g:
                 st.subheader("📱 Ringkasan Nilai Ganjil (Tampilan HP)")
-                df_g = pd.DataFrame(list(nilai_g['akademik'].items()), columns=['Mata Pelajaran', 'Nilai'])
-                st.dataframe(df_g, width='stretch', hide_index=True)
-                st.write(f"**Jumlah Nilai:** {nilai_g['jumlah']} | **Rata-rata:** {nilai_g['rata_rata']:.2f}")
-                st.write(f"**Catatan Wali Kelas:** {nilai_g.get('catatan', '-')}")
+                komponen_g = nilai_g.get('komponen_nilai', {})
+                akademik_g = komponen_g.get('akademik', {})
+                
+                df_g = pd.DataFrame(list(akademik_g.items()), columns=['Mata Pelajaran', 'Nilai'])
+                st.dataframe(df_g, use_container_width=True, hide_index=True)
+                
+                st.write(f"**Jumlah Nilai:** {nilai_g.get('jumlah', 0)} | **Rata-rata:** {nilai_g.get('rata_rata', 0):.2f}")
+                st.write(f"**Catatan Wali Kelas:** {komponen_g.get('catatan', '-')}")
             
             st.info("💡 *Catatan HP:* Jika kotak PDF di bawah ini kosong, silakan langsung klik tombol **Download Raport Ganjil (PDF)** di atas.")
             st.session_state.pdf_ganjil.seek(0)
@@ -83,8 +88,10 @@ def render(db):
     # 3. TAB SEMESTER 2 (GENAP)
     # ========================================
     with sub_genap:
+        nilai_e = db.get_nilai(santri['id'], 2)
+        
         if st.button("⚙️ Buat Preview Genap", key="btn_genap"):
-            if not db.get_nilai(santri['id'], 2):
+            if not nilai_e:
                 st.error(f"❌ {pilih_nama} belum memiliki data nilai untuk Semester Genap.")
                 st.session_state.pdf_genap = None
             else:
@@ -94,15 +101,18 @@ def render(db):
         if 'pdf_genap' in st.session_state and st.session_state.pdf_genap:
             st.download_button("⬇️ Download Raport Genap (PDF)", data=st.session_state.pdf_genap, file_name=f"Raport_Genap_{pilih_nama}.pdf", mime="application/pdf")
             
-            # --- TAMPILAN RINGKAS UNTUK HP ---
-            nilai_e = db.get_nilai(santri['id'], 2)
+            # --- TAMPILAN RINGKAS UNTUK HP (SUDAH DISESUAIKAN DENGAN JSONB) ---
             if nilai_e:
                 st.subheader("📱 Ringkasan Nilai Genap (Tampilan HP)")
-                df_e = pd.DataFrame(list(nilai_e['akademik'].items()), columns=['Mata Pelajaran', 'Nilai'])
-                st.dataframe(df_e, width='stretch', hide_index=True)
-                st.write(f"**Jumlah Nilai:** {nilai_e['jumlah']} | **Rata-rata:** {nilai_e['rata_rata']:.2f}")
-                st.write(f"**Keputusan Akhir:** {nilai_e.get('status', '-')}")
-                st.write(f"**Catatan Wali Kelas:** {nilai_e.get('catatan', '-')}")
+                komponen_e = nilai_e.get('komponen_nilai', {})
+                akademik_e = komponen_e.get('akademik', {})
+                
+                df_e = pd.DataFrame(list(akademik_e.items()), columns=['Mata Pelajaran', 'Nilai'])
+                st.dataframe(df_e, use_container_width=True, hide_index=True)
+                
+                st.write(f"**Jumlah Nilai:** {nilai_e.get('jumlah', 0)} | **Rata-rata:** {nilai_e.get('rata_rata', 0):.2f}")
+                st.write(f"**Keputusan Akhir:** {komponen_e.get('status', '-')}")
+                st.write(f"**Catatan Wali Kelas:** {komponen_e.get('catatan', '-')}")
                 
             st.info("💡 *Catatan HP:* Jika kotak PDF di bawah ini kosong, silakan langsung klik tombol **Download Raport Genap (PDF)** di atas.")
             st.session_state.pdf_genap.seek(0)
