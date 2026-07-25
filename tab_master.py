@@ -15,7 +15,7 @@ def render(db):
     st.markdown("---")
     st.subheader("📚 Pengaturan Kelas & Mata Pelajaran")
     
-    # Mengambil data pengaturan yang sudah ada di database
+    # Mengambil data pengaturan
     pengaturan_lama = db.data_lembaga.get("pengaturan_master") or {}
     kelas_mapel = pengaturan_lama.get("kelas_mapel", {})
     
@@ -24,16 +24,27 @@ def render(db):
         teks_awal += f"{kls} : {', '.join(mapel_list)}\n"
         
     if getattr(db, 'role', '') == 'admin':
+        # --- PERBAIKAN: TEMPLATE KURIKULUM OTOMATIS SESUAI TINGKATAN ---
         if not teks_awal:
-            teks_awal = "1A : Al-Qur'an, Hadits, Fiqih, Aqidah\n2A : Al-Qur'an, Hadits, Fiqih, Sejarah Islam"
+            profil = db.data_lembaga.get("profil_lengkap", {})
+            tingkat = str(profil.get("tingkatan", "")).upper()
             
+            if "TKA" in tingkat or "TKQ" in tingkat:
+                teks_awal = "TKA A : Iqro, Hafalan Doa Sehari-hari, Hafalan Surat Pendek, Praktek Sholat\nTKA B : Al-Qur'an Dasar, Aqidah Akhlak Dasar, Hafalan Surat Pendek, Praktek Sholat"
+            elif "TPA" in tingkat or "TPQ" in tingkat:
+                teks_awal = "TPA A : Al-Qur'an, Ilmu Tajwid Dasar, Aqidah Akhlak, Fiqih Ibadah\nTPA B : Al-Qur'an, Hafalan Surat Pilihan, Sejarah Kebudayaan Islam, Bahasa Arab Dasar"
+            elif "MDT" in tingkat or "DINIYAH" in tingkat:
+                teks_awal = "Kelas 1 : Al-Qur'an Hadits, Aqidah Akhlak, Fiqih, Sejarah Kebudayaan Islam, Bahasa Arab\nKelas 2 : Al-Qur'an Hadits, Aqidah Akhlak, Fiqih, Sejarah Kebudayaan Islam, Bahasa Arab\nKelas 3 : Al-Qur'an Hadits, Aqidah Akhlak, Fiqih, Sejarah Kebudayaan Islam, Bahasa Arab"
+            else:
+                teks_awal = "1A : Al-Qur'an, Hadits, Fiqih, Aqidah\n2A : Al-Qur'an, Hadits, Fiqih, Sejarah Islam"
+                
         with st.expander("⚙️ Edit Daftar Kelas & Mata Pelajaran", expanded=True if not kelas_mapel else False):
             with st.form("form_mapel"):
                 st.info("💡 **Petunjuk Pengisian:** Ketik nama kelas, beri tanda titik dua (:), lalu pisahkan mata pelajaran dengan koma (,).")
                 teks_input = st.text_area(
                     "Daftar Kelas & Mata Pelajaran",
-                    value=teks_awal,
-                    height=150
+                    value=teks_awal.strip(),
+                    height=200
                 )
                 if st.form_submit_button("💾 Simpan Mata Pelajaran"):
                     data_baru = {}
@@ -71,7 +82,6 @@ def render(db):
     if getattr(db, 'role', '') == 'admin':
         t_tambah, t_edit, t_daftar = st.tabs(["➕ Tambah Guru", "✏️ Edit & Hapus", "📋 Daftar Guru"])
         
-        # --- TAB 1: TAMBAH GURU ---
         with t_tambah:
             st.info("Akun yang dibuat akan langsung terhubung dengan madrasah ini.")
             with st.form("form_tambah_guru"):
@@ -115,7 +125,6 @@ def render(db):
                         else:
                             st.error(pesan)
                             
-        # --- TAB 2: EDIT & HAPUS GURU ---
         with t_edit:
             if not daftar_guru:
                 st.warning("Belum ada data guru. Silakan tambahkan terlebih dahulu.")
@@ -178,7 +187,6 @@ def render(db):
                                 else:
                                     st.error(pesan)
                                     
-                    # --- TOMBOL HAPUS AKUN ---
                     st.markdown("---")
                     st.markdown("#### 🗑️ Hapus Akun Secara Permanen")
                     st.error("⚠️ Menghapus akun akan menghilangkan akses login guru tersebut secara permanen.")
@@ -195,7 +203,6 @@ def render(db):
                         else:
                             st.warning("Silakan centang kotak konfirmasi terlebih dahulu!")
                             
-        # --- TAB 3: DAFTAR GURU ---
         with t_daftar:
             if daftar_guru:
                 df_guru = pd.DataFrame(daftar_guru)

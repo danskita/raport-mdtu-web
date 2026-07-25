@@ -206,18 +206,40 @@ class DataEngine:
         self.kelas_binaan = None
         self.list_akses_lembaga = []
 
+    # ==========================================================
+    # PERBAIKAN: MESIN PENCARI SANTRI CERDAS (SMART FILTER)
+    # ==========================================================
     def muat_data_santri(self):
         if not self.lembaga_id: 
             return
         try:
-            query = self.supabase.table("biodata_santri").select("*").eq("lembaga_id", self.lembaga_id)
-            if self.role == "wali_kelas" and self.kelas_binaan:
-                query = query.eq("data_lengkap->>kelas_santri", self.kelas_binaan)
+            # 1. Tarik semua data santri di madrasah ini dari database
+            res = self.supabase.table("biodata_santri").select("*").eq("lembaga_id", self.lembaga_id).execute()
+            semua_santri = res.data if res.data else []
             
-            res = query.execute()
-            self.data_master = res.data if res.data else []
-        except: 
-            pass
+            # 2. Jika yang login adalah Admin (atau guru tanpa kelas binaan), tampilkan semua data
+            if self.role != "wali_kelas" or not self.kelas_binaan:
+                self.data_master = semua_santri
+            else:
+                # 3. Jika Wali Kelas, lakukan "Smart Filter" agar tidak di-blokir oleh typo/spasi
+                kelas_binaan_bersih = str(self.kelas_binaan).upper().replace(" ", "")
+                
+                santri_kelasku = []
+                for s in semua_santri:
+                    # Ambil data kelas dari JSONB
+                    data_lengkap = s.get("data_lengkap", {})
+                    kelas_santri = str(data_lengkap.get("kelas_santri", data_lengkap.get("kelas", "")))
+                    kelas_santri_bersih = kelas_santri.upper().replace(" ", "")
+                    
+                    # Jika kelasnya cocok, masukkan ke daftar pandangan Wali Kelas
+                    if kelas_santri_bersih == kelas_binaan_bersih:
+                        santri_kelasku.append(s)
+                        
+                # Update memori aplikasi dengan daftar santri yang sudah difilter
+                self.data_master = santri_kelasku
+                
+        except Exception as e: 
+            print(f"Error muat_data_santri: {e}")
 
     def get_daftar_nama(self):
         return [santri["nama"] for santri in self.data_master]
