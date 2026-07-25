@@ -1,5 +1,6 @@
 import io
 import base64
+from datetime import date
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 from reportlab.platypus import Table, TableStyle
@@ -107,18 +108,23 @@ class PDFGenerator:
         dl = self._get_dl_flat()
         pengaturan = dl.get("pengaturan_master", {})
         
-        # Ekstrak Kelas Santri untuk mencari Wali Kelas
         data_lengkap = santri.get("data_lengkap", {})
-        kelas_santri = data_lengkap.get("kelas_santri", "-")
-        wali_dict = dl.get("wali_kelas", {})
-        nama_wali = wali_dict.get(kelas_santri, "........................")
+        kelas_santri = data_lengkap.get("kelas_santri", data_lengkap.get("kelas", "-"))
+        
+        # Cari data guru (Wali Kelas) dari database
+        daftar_guru = self.db.get_semua_guru_lembaga()
+        nama_wali = "........................"
+        for g in daftar_guru:
+            if g.get('role') == 'wali_kelas' and str(g.get('kelas_binaan')).upper().replace(" ","") == str(kelas_santri).upper().replace(" ",""):
+                nama_wali = g.get('nama_guru', "........................")
+                break
         
         buffer = io.BytesIO()
         c = canvas.Canvas(buffer, pagesize=A4)
         lebar, tinggi = A4
         
         c.setFont("Helvetica-Bold", 16)
-        c.drawCentredString(lebar/2, tinggi - 2*cm, "DAFTAR NILAI")
+        c.drawCentredString(lebar/2, tinggi - 2*cm, "DAFTAR CAPAIAN KOMPETENSI")
 
         c.setFont("Helvetica", 10)
         y_kop = tinggi - 3*cm
@@ -138,120 +144,110 @@ class PDFGenerator:
         c.drawString(x_kanan + 3*cm, y_kop, f": {kelas_santri}")
         c.drawString(x_kanan, y_kop - 0.5*cm, "Semester")
         c.drawString(x_kanan + 3*cm, y_kop - 0.5*cm, f": {sem_teks}")
-        c.drawString(x_kanan, y_kop - 1*cm, "Tahun Pelajaran")
-        c.drawString(x_kanan + 3*cm, y_kop - 1*cm, f": {dl.get('tahun_pelajaran', '-')}")
 
-        # ================= TABEL DINAMIS =================
-        data_tabel = [['No.', 'Mata Pelajaran', 'Nilai Prestasi', '', 'Rata-rata\nKelas'], ['', '', 'Angka', 'Huruf', '']]
+        # ================= TABEL DINAMIS (PENILAIAN BARU) =================
+        # Ekstrak data dari JSONB 'komponen_nilai'
+        komp_nilai = nilai.get('komponen_nilai', {})
+        n_akademik = komp_nilai.get('akademik', {})
+        n_narasi = komp_nilai.get('narasi_akademik', {})
+        
+        data_tabel = [['No.', 'Mata Pelajaran', 'Nilai', 'Predikat', 'Deskripsi Kemampuan']]
         styles = [
             ('GRID', (0,0), (-1,-1), 1, colors.black),
             ('ALIGN', (0,0), (-1,-1), 'CENTER'),
             ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
-            ('ALIGN', (1,2), (1,-1), 'LEFT'),
-            ('FONTNAME', (0,0), (-1,1), 'Helvetica-Bold'),
-            ('BACKGROUND', (0,0), (-1,1), colors.lightgrey),
-            ('SPAN', (0,0), (0,1)), ('SPAN', (1,0), (1,1)), 
-            ('SPAN', (2,0), (3,0)), ('SPAN', (4,0), (4,1))
+            ('ALIGN', (1,0), (1,-1), 'LEFT'),
+            ('ALIGN', (4,0), (4,-1), 'LEFT'),
+            ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
+            ('BACKGROUND', (0,0), (-1,0), colors.lightgrey),
         ]
 
-        dict_mapel = pengaturan.get("mapel", {})
-        # Migrasi darurat jika format mapel masih list
-        if isinstance(dict_mapel, list):
-            dict_mapel = {"Mata Pelajaran": dict_mapel}
+        kelas_mapel = pengaturan.get("kelas_mapel", {})
+        mapel_list = []
+        kelas_santri_bersih = str(kelas_santri).upper().replace(" ", "")
+        
+        for kls, mapels in kelas_mapel.items():
+            if str(kls).upper().replace(" ", "") == kelas_santri_bersih:
+                mapel_list = mapels
+                break
 
-        row_idx = 2
-        romawi = ["I", "II", "III", "IV", "V"]
-        kat_idx = 0
-
-        for kategori, mapels in dict_mapel.items():
-            # Baris Judul Kategori
-            no_kat = romawi[kat_idx] if kat_idx < len(romawi) else str(kat_idx+1)
-            data_tabel.append([no_kat, kategori, '', '', ''])
-            styles.append(('SPAN', (1, row_idx), (4, row_idx)))
-            styles.append(('FONTNAME', (0, row_idx), (-1, row_idx), 'Helvetica-Bold'))
-            styles.append(('BACKGROUND', (0, row_idx), (-1, row_idx), colors.whitesmoke))
+        row_idx = 1
+        for i, mapel in enumerate(mapel_list):
+            skor = int(n_akademik.get(mapel, 0))
+            data_mapel = n_narasi.get(mapel, {})
+            predikat = data_mapel.get("predikat", "-")
+            deskripsi = data_mapel.get("deskripsi", "-")
+            
+            data_tabel.append([str(i+1), mapel, str(skor), predikat, deskripsi])
             row_idx += 1
-            kat_idx += 1
-
-            # Baris Isi Mata Pelajaran
-            for i, mapel in enumerate(mapels):
-                skor = nilai['akademik'].get(mapel, 0)
-                huruf = terbilang(skor).capitalize()
-                data_tabel.append([str(i+1), f"   {mapel}", f"{skor:.0f}", huruf, '-'])
-                row_idx += 1
-
-        # Baris Jumlah
-        data_tabel.append(['', 'JUMLAH', f"{nilai['jumlah']:.0f}", terbilang(nilai['jumlah']).capitalize(), '-'])
-        styles.append(('SPAN', (0, row_idx), (1, row_idx)))
-        styles.append(('FONTNAME', (0, row_idx), (-1, row_idx), 'Helvetica-Bold'))
-        row_idx += 1
-
-        # Baris Peringkat
-        data_tabel.append([f"Peringkat Kelas ke {rank} dari {total_siswa} santri", '', '', '', ''])
-        styles.append(('SPAN', (0, row_idx), (-1, row_idx)))
-        styles.append(('ALIGN', (0, row_idx), (-1, row_idx), 'LEFT'))
-        styles.append(('FONTNAME', (0, row_idx), (-1, row_idx), 'Helvetica-Bold'))
 
         # Gambar Tabel Akademik
-        tabel = Table(data_tabel, colWidths=[1*cm, 6*cm, 2*cm, 6*cm, 2*cm])
+        tabel = Table(data_tabel, colWidths=[1*cm, 4*cm, 1.5*cm, 1.8*cm, 8.7*cm])
         tabel.setStyle(TableStyle(styles))
         w, h = tabel.wrap(lebar, tinggi)
-        y_tabel = y_kop - 2*cm - h
+        y_tabel = y_kop - 2.5*cm - h
         tabel.drawOn(c, 2*cm, y_tabel)
 
         y_bawah = y_tabel - 0.5*cm
 
         # ================= KEPUTUSAN SEMESTER 2 =================
         if semester == 2:
-            status_teks = f"KEPUTUSAN :\nDengan memperhatikan hasil yang dicapai pada Semester 1 dan 2,\nsantri ini ditetapkan : STATUS {nilai.get('status', '-').upper()}"
+            status_akhir = komp_nilai.get('status', 'LULUS / NAIK KELAS')
             c.setFont("Helvetica-Bold", 10)
-            t = c.beginText(2*cm, y_bawah)
-            for line in status_teks.split('\n'):
-                t.textLine(line)
-            c.drawText(t)
+            c.drawString(2*cm, y_bawah, "KEPUTUSAN:")
+            c.setFont("Helvetica", 10)
+            c.drawString(2*cm, y_bawah - 0.5*cm, "Berdasarkan hasil capaian di atas, santri yang bersangkutan dinyatakan:")
+            c.setFont("Helvetica-Bold", 12)
+            c.drawString(2*cm, y_bawah - 1.2*cm, status_akhir.upper())
             y_bawah -= 2*cm 
 
         # ================= KEPRIBADIAN & ABSEN =================
-        p = nilai.get("kepribadian", {})
-        a = nilai.get("absen", {})
-        narasi = pengaturan.get("narasi", {})
+        p = komp_nilai.get("kepribadian", {})
+        a = komp_nilai.get("absen", {})
+        
+        def getTextP(val):
+            if val == "A": return "Sangat Baik"
+            if val == "B": return "Baik"
+            if val == "C": return "Cukup"
+            return "Kurang"
 
-        # Menggabungkan Nilai (A/B) dengan Narasinya
-        kelakuan_teks = f"{p.get('Kelakuan','-')} ({narasi.get(p.get('Kelakuan'), '')})"
-        kerajinan_teks = f"{p.get('Kerajinan','-')} ({narasi.get(p.get('Kerajinan'), '')})"
-        kebersihan_teks = f"{p.get('Kebersihan','-')} ({narasi.get(p.get('Kebersihan'), '')})"
+        kel_val = p.get('Kelakuan','B')
+        ker_val = p.get('Kerajinan','B')
+        keb_val = p.get('Kebersihan','B')
 
         data_bawah = [
-            ["Kepribadian", "1. Kelakuan\n2. Kerajinan\n3. Kebersihan", f"{kelakuan_teks}\n{kerajinan_teks}\n{kebersihan_teks}"],
+            ["Kepribadian & Sikap", "1. Kelakuan\n2. Kerajinan\n3. Kebersihan", f"{kel_val} ({getTextP(kel_val)})\n{ker_val} ({getTextP(ker_val)})\n{keb_val} ({getTextP(keb_val)})"],
             ["Ketidakhadiran", "1. Sakit\n2. Izin\n3. Alpa", f"{a.get('Sakit','0')} hari\n{a.get('Izin','0')} hari\n{a.get('Alpa','0')} hari"],
-            [f"Catatan Wali Kelas:\n{nilai.get('catatan', '-')}", "", ""]
+            [f"Catatan Wali Kelas:\n{komp_nilai.get('catatan', '-')}", "", ""]
         ]
         
-        tabel_bawah = Table(data_bawah, colWidths=[3.5*cm, 3.5*cm, 10*cm])
+        tabel_bawah = Table(data_bawah, colWidths=[4*cm, 3*cm, 10*cm])
         tabel_bawah.setStyle(TableStyle([
             ('GRID', (0,0), (-1,-1), 1, colors.black), ('VALIGN', (0,0), (-1,-1), 'TOP'),
             ('ALIGN', (0,0), (0,-2), 'CENTER'),
             ('SPAN', (0,2), (2,2))
         ]))
         wb, hb = tabel_bawah.wrap(lebar, tinggi)
-        y_bawah = y_bawah - hb
+        y_bawah = y_bawah - hb - 0.5*cm
         tabel_bawah.drawOn(c, 2*cm, y_bawah)
 
         # ================= TANDA TANGAN =================
         c.setFont("Helvetica", 10)
         y_ttd = y_bawah - 1.5*cm
-        c.drawString(2*cm, y_ttd, f"Diberikan di : {dl.get('tempat_raport', '-')}")
-        c.drawString(2*cm, y_ttd - 0.5*cm, f"Tanggal      : {dl.get('tanggal_raport', '-')}")
+        tgl_raport = date.today().strftime('%d %B %Y')
+        c.drawString(2*cm, y_ttd, f"Diberikan di : {dl.get('kabupaten_kota', '-')}")
+        c.drawString(2*cm, y_ttd - 0.5*cm, f"Tanggal      : {tgl_raport}")
         
-        c.drawCentredString(lebar/2, y_ttd - 1.5*cm, "Mengetahui")
-        c.drawString(2.5*cm, y_ttd - 2*cm, "Kepala Madrasah,")
-        c.drawCentredString(lebar/2, y_ttd - 2*cm, "Orang Tua,")
-        c.drawString(lebar - 5*cm, y_ttd - 2*cm, "Wali Kelas,")
+        c.drawCentredString(lebar/2, y_ttd - 1.5*cm, "Mengetahui,")
+        c.drawString(2.5*cm, y_ttd - 2*cm, "Kepala Madrasah")
+        c.drawCentredString(lebar/2, y_ttd - 2*cm, "Orang Tua/Wali")
+        c.drawString(lebar - 5.5*cm, y_ttd - 2*cm, "Wali Kelas")
 
         c.setFont("Helvetica-Bold", 10)
-        c.drawString(2.5*cm, y_ttd - 4.5*cm, dl.get('kepala_madin', '........................'))
-        # Tanda tangan ini sekarang membaca Wali Kelas dinamis berdasarkan tingkatan kelas!
-        c.drawString(lebar - 5*cm, y_ttd - 4.5*cm, nama_wali)
+        # Ambil nama Kepala Madrasah dari Auth/Profil (Jika ada), sementara pakai nama_madrasah fallback
+        nama_kepala = dl.get('nama_kepala', '........................')
+        c.drawString(2.5*cm, y_ttd - 4.5*cm, nama_kepala)
+        c.drawString(lebar - 5.5*cm, y_ttd - 4.5*cm, nama_wali)
         
         c.showPage()
         c.save()
