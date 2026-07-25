@@ -19,7 +19,6 @@ def render(db):
     pengaturan_lama = db.data_lembaga.get("pengaturan_master") or {}
     kelas_mapel = pengaturan_lama.get("kelas_mapel", {})
     
-    # Draf Standar Nasional Kurikulum TKA A/B, TPA A/B, MDTU 1-4
     teks_default_nasional = """TKA A : Qira'ati / Iqro / Tilawati, Tahfidz, Doa dan Dzikir Harian, Dinul Islam / Aqidah Akhlak, Fiqih Ibadah, Khat / Imla, Tarikh / Sejarah Islam
 TKA B : Qira'ati / Iqro / Tilawati, Tahfidz, Doa dan Dzikir Harian, Dinul Islam / Aqidah Akhlak, Fiqih Ibadah, Khat / Imla, Tarikh / Sejarah Islam
 TPA A : Qira'ati / Iqro / Tilawati, Tahfidz, Doa dan Dzikir Harian, Dinul Islam / Aqidah Akhlak, Fiqih Ibadah, Khat / Imla, Tarikh / Sejarah Islam
@@ -36,7 +35,7 @@ MDTU 4 : Al-Qur'an Hadits, Aqidah Akhlak, Fiqih, Sejarah Kebudayaan Islam, Bahas
     is_kepala = getattr(db, 'role', '') in ['kepala_madrasah', 'admin']
     
     if is_kepala:
-        if st.button("🔄 Muat Kurikulum Standar Nasional (TKA A/B, TPA A/B, MDTU 1-4)"):
+        if st.button("🔄 Muat Kurikulum Standar Nasional"):
             data_baru = {}
             for line in teks_default_nasional.strip().split('\n'):
                 if ":" in line:
@@ -66,7 +65,8 @@ MDTU 4 : Al-Qur'an Hadits, Aqidah Akhlak, Fiqih, Sejarah Kebudayaan Islam, Bahas
                     if sukses:
                         st.success("✅ Pengaturan kurikulum berhasil disimpan!")
                         st.rerun()
-                    else: st.error(pesan)
+                    else:
+                        st.error(pesan)
     else:
         if not kelas_mapel:
             st.warning("Belum ada mata pelajaran yang diatur oleh Kepala Madrasah.")
@@ -120,8 +120,11 @@ MDTU 4 : Al-Qur'an Hadits, Aqidah Akhlak, Fiqih, Sejarah Kebudayaan Islam, Bahas
                             nama_guru, username, password, role, kelas_binaan,
                             nik, jk, tempat_lahir, tgl_lahir, no_hp, alamat
                         )
-                        if sukses: st.success(pesan); st.rerun()
-                        else: st.error(pesan)
+                        if sukses:
+                            st.success(pesan)
+                            st.rerun()
+                        else:
+                            st.error(pesan)
                             
         with t_edit:
             if not daftar_guru:
@@ -149,12 +152,20 @@ MDTU 4 : Al-Qur'an Hadits, Aqidah Akhlak, Fiqih, Sejarah Kebudayaan Islam, Bahas
                         with c3:
                             e_nik = st.text_input("NIK", value=g_data.get('nik', '') or "")
                             e_tempat = st.text_input("Tempat Lahir", value=g_data.get('tempat_lahir', '') or "")
+                            
                             tgl_str = g_data.get('tanggal_lahir')
-                            try: tgl_val = datetime.strptime(tgl_str, "%Y-%m-%d").date() if tgl_str else date(1990, 1, 1)
-                            except: tgl_val = date(1990, 1, 1)
+                            try:
+                                tgl_val = datetime.strptime(tgl_str, "%Y-%m-%d").date() if tgl_str else date(1990, 1, 1)
+                            except:
+                                tgl_val = date(1990, 1, 1)
+                                
                             e_tgl = st.date_input("Tanggal Lahir", value=tgl_val)
+                            
                             jks = ["Laki-laki", "Perempuan"]
-                            e_jk = st.selectbox("Jenis Kelamin", jks, index=jks.index(g_data.get('jenis_kelamin', 'Laki-laki')) if g_data.get('jenis_kelamin') in jks else 0)
+                            jk_val = g_data.get('jenis_kelamin', 'Laki-laki')
+                            idx_jk = jks.index(jk_val) if jk_val in jks else 0
+                            e_jk = st.selectbox("Jenis Kelamin", jks, index=idx_jk)
+                            
                         with c4:
                             e_hp = st.text_input("No WhatsApp", value=g_data.get('no_hp', '') or "")
                             e_alamat = st.text_area("Alamat Lengkap", value=g_data.get('alamat', '') or "")
@@ -164,17 +175,24 @@ MDTU 4 : Al-Qur'an Hadits, Aqidah Akhlak, Fiqih, Sejarah Kebudayaan Islam, Bahas
                                 g_data['id'], e_nama, e_username, e_password, e_role, e_kelas,
                                 e_nik, e_jk, e_tempat, e_tgl, e_hp, e_alamat
                             )
-                            if sukses: st.success(pesan); st.rerun()
-                            else: st.error(pesan)
+                            if sukses:
+                                st.success(pesan)
+                                st.rerun()
+                            else:
+                                st.error(pesan)
                                     
                     st.markdown("---")
                     konfirmasi = st.checkbox(f"Saya yakin ingin menghapus akun **{g_data['nama_guru']}**")
                     if st.button("🗑️ Hapus Akun Guru Ini"):
                         if konfirmasi:
                             sukses, pesan = db.hapus_akun_guru(g_data['id'])
-                            if sukses: st.success(pesan); st.rerun()
-                            else: st.error(pesan)
-                        else: st.warning("Centang konfirmasi terlebih dahulu!")
+                            if sukses:
+                                st.success(pesan)
+                                st.rerun()
+                            else:
+                                st.error(pesan)
+                        else:
+                            st.warning("Centang konfirmasi terlebih dahulu!")
                             
         with t_daftar:
             if daftar_guru:
@@ -184,6 +202,7 @@ MDTU 4 : Al-Qur'an Hadits, Aqidah Akhlak, Fiqih, Sejarah Kebudayaan Islam, Bahas
                 df_display.rename(columns={'nama_guru': 'Nama Lengkap', 'username': 'Username/NIP', 'role': 'Akses', 'kelas_binaan': 'Wali Kelas', 'no_hp': 'No. WA'}, inplace=True)
                 df_display.index = df_display.index + 1 
                 st.dataframe(df_display, use_container_width=True)
-            else: st.info("Belum ada data guru.")
+            else:
+                st.info("Belum ada data guru.")
     else:
         st.info("🔒 Pengelolaan akun guru hanya dapat dilakukan oleh Kepala Madrasah.")
