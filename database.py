@@ -43,12 +43,11 @@ class DataEngine:
             return False, f"Pendaftaran error: {e}"
 
     # --- FITUR MANAJEMEN AKUN GURU ---
-    def tambah_akun_guru(self, nama_guru, username, password, role, kelas_binaan):
-        """Admin mendaftarkan guru/wali kelas secara manual"""
+    def tambah_akun_guru(self, nama_guru, username, password, role, kelas_binaan, nik, jk, tempat_lahir, tgl_lahir, no_hp, alamat):
+        """Admin mendaftarkan guru dengan kelengkapan KTP"""
         if not self.lembaga_id: 
             return False, "❌ Akses ditolak: Identitas lembaga tidak ditemukan."
         
-        # Enkripsi password
         hashed_password = hashlib.sha256(password.encode()).hexdigest()
         
         data_baru = {
@@ -57,13 +56,20 @@ class DataEngine:
             "username": username.strip(),
             "password": hashed_password, 
             "role": role,
-            "kelas_binaan": kelas_binaan if kelas_binaan and str(kelas_binaan).strip() != "" else None
+            "kelas_binaan": kelas_binaan if kelas_binaan and str(kelas_binaan).strip() != "" else None,
+            # Data tambahan sesuai KTP
+            "nik": nik,
+            "jenis_kelamin": jk,
+            "tempat_lahir": tempat_lahir,
+            "tanggal_lahir": str(tgl_lahir),
+            "no_hp": no_hp,
+            "alamat": alamat
         }
         
         try:
             res = self.supabase.table("guru").insert(data_baru).execute()
             if res.data:
-                return True, f"✅ Berhasil! Akun untuk {nama_guru} telah ditambahkan."
+                return True, f"✅ Berhasil! Akun dan Biodata untuk {nama_guru} telah ditambahkan."
             return False, "❌ Gagal menyimpan data ke database."
         except Exception as e:
             return False, f"❌ Error Database: {e}"
