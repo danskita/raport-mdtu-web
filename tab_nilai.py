@@ -1,7 +1,75 @@
 import streamlit as st
 
+# ==========================================================
+# HELPER STANDAR NASIONAL: PREDIKAT & DESKRIPSI NARASI
+# ==========================================================
+def hitung_predikat_dan_deskripsi(nilai, nama_mapel):
+    """Menghasilkan Predikat (A/B/C/D) & Narasi Capaian Pembelajaran"""
+    if nilai >= 86:
+        predikat = "A"
+        narasi = f"Sangat baik dan sangat menguasai seluruh indikator capaian pada mata pelajaran {nama_mapel}."
+    elif nilai >= 71:
+        predikat = "B"
+        narasi = f"Baik dan menunjukkan penguasaan yang memadai pada sebagian besar indikator mata pelajaran {nama_mapel}."
+    elif nilai >= 56:
+        predikat = "C"
+        narasi = f"Cukup menguasai indikator dasar pada {nama_mapel}, masih memerlukan bimbingan rutin."
+    else:
+        predikat = "D"
+        narasi = f"Perlu bimbingan intensif dan perhatian khusus pada kompetensi dasar {nama_mapel}."
+    return predikat, narasi
+
+def hitung_keputusan_otomatis(rata_rata, mapel_dibawah_kkm, alpa, sikap_baik, kelas_sekarang):
+    """
+    Sistem Perhitungan Kenaikan Kelas Otomatis berdasarkan Standar Nasional:
+    1. KKM minimal per mapel = 60
+    2. Maksimal mapel di bawah KKM = 2
+    3. Rata-rata akhir minimal = 60
+    4. Maksimal alpa = 10 hari
+    5. Nilai sikap/kepribadian tidak 'C' atau 'D'
+    """
+    # Peta Urutan Kenaikan Kelas
+    urutan_kelas = {
+        "TKA A": "TKA B",
+        "TKA B": "TPA A",
+        "TPA A": "TPA B",
+        "TPA B": "LULUS",
+        "MDTU 1": "MDTU 2",
+        "MDTU 2": "MDTU 3",
+        "MDTU 3": "MDTU 4",
+        "MDTU 4": "LULUS"
+    }
+    
+    # Syarat Kelulusan/Kenaikan
+    syarat_lulus = (
+        rata_rata >= 60 and 
+        mapel_dibawah_kkm <= 2 and 
+        alpa <= 10 and 
+        sikap_baik
+    )
+    
+    kelas_bersih = str(kelas_sekarang).upper().strip()
+    kelas_tujuan = urutan_kelas.get(kelas_bersih, "LULUS")
+    
+    if syarat_lulus:
+        if kelas_tujuan == "LULUS" or "MDTU 4" in kelas_bersih or "TPA B" in kelas_bersih:
+            return "LULUS", "Sistem Menetapkan: LULUS (Memenuhi seluruh standar kriteria nilai nasional)"
+        else:
+            return f"Naik Kelas {kelas_tujuan}", f"Sistem Menetapkan: NAIK KELAS ke {kelas_tujuan}"
+    else:
+        alasan = []
+        if rata_rata < 60: alasan.append(f"Rata-rata ({rata_rata:.1f}) < 60")
+        if mapel_dibawah_kkm > 2: alasan.append(f"Mapel di bawah KKM ({mapel_dibawah_kkm}) > 2")
+        if alpa > 10: alasan.append(f"Alpa ({alpa} hari) > 10 hari")
+        if not sikap_baik: alasan.append("Nilai Sikap perlu pembinaan")
+        
+        detail_alasan = ", ".join(alasan)
+        return f"Tinggal di Kelas {kelas_sekarang}", f"Sistem Menetapkan: TINGGAL DI KELAS ({detail_alasan})"
+
+
 def render(db):
     st.header("📝 Input & Edit Nilai Santri")
+    st.caption("Sistem Penilaian Standar Nasional dengan Narasi Deskripsi & Kenaikan Kelas Otomatis")
     
     if not db.lembaga_id:
         st.warning("⚠️ Anda belum memilih madrasah yang aktif. Silakan kembali ke Profil.")
@@ -11,7 +79,6 @@ def render(db):
         return st.warning("Belum ada data santri yang terdaftar di kelas/lembaga ini.")
 
     st.markdown("---")
-    
     map_santri = {s['nama']: s for s in db.data_master}
     
     col_atas1, col_atas2 = st.columns(2)
@@ -26,21 +93,15 @@ def render(db):
         santri_aktif = map_santri[pilih_nama]
         santri_id = santri_aktif["id"]
         
-        # ==========================================================
-        # PERBAIKAN: DETEKSI KELAS SUPER KUAT (ANTI GAGAL)
-        # ==========================================================
         data_lengkap = santri_aktif.get("data_lengkap", {})
-        
-        # Coba cari dari 'kelas_santri', lalu dari 'kelas'
         kelas_santri = str(data_lengkap.get("kelas_santri", data_lengkap.get("kelas", ""))).strip()
         
-        # JIKA TETAP KOSONG, pinjam kelas dari akun Wali Kelas yang sedang login!
         if not kelas_santri and getattr(db, 'kelas_binaan', None):
             kelas_santri = db.kelas_binaan
             
         st.info(f"👤 **Santri:** {pilih_nama} | **Kelas:** {kelas_santri}")
         
-        # Tarik pengaturan Master Data untuk Kelas & Mapel
+        # Tarik pengaturan Master Data
         pengaturan = db.data_lembaga.get("pengaturan_master") or {}
         kelas_mapel = pengaturan.get("kelas_mapel", {})
         
@@ -48,102 +109,92 @@ def render(db):
         kelas_santri_bersih = kelas_santri.upper().replace(" ", "")
         
         for kls, mapels in kelas_mapel.items():
-            kls_bersih = str(kls).upper().replace(" ", "")
-            if kls_bersih == kelas_santri_bersih:
+            if str(kls).upper().replace(" ", "") == kelas_santri_bersih:
                 mapel_list = mapels
                 break
         
-        # Jika Mapel tetap tidak ditemukan
         if not mapel_list:
-            st.error(f"❌ Mata pelajaran untuk kelas **{kelas_santri}** tidak ditemukan di sistem!")
-            st.warning("💡 **Solusi:** Pastikan Admin Lembaga sudah mengatur mata pelajaran untuk kelas ini di menu **Master Data**.")
-            kelas_tersedia = list(kelas_mapel.keys()) if kelas_mapel else ["Belum ada kelas yang diatur"]
-            st.info(f"📝 **Daftar Kelas di Master Data saat ini:** {', '.join(kelas_tersedia)}")
+            st.error(f"❌ Mata pelajaran untuk kelas **{kelas_santri}** belum diatur!")
+            st.info(f"📝 Kelas yang tersedia di Master Data: {', '.join(kelas_mapel.keys()) if kelas_mapel else 'Belum ada'}")
             return
 
-        # Ambil data nilai yang sudah ada (jika pernah diinput)
         nilai_lama = db.get_nilai(santri_id, semester)
-        
-        if nilai_lama: 
-            st.success("ℹ️ Mode Edit: Data nilai santri ini sudah pernah disimpan. Anda bisa mengubahnya di bawah ini.")
-            
         komp_lama = nilai_lama.get('komponen_nilai', {}) if nilai_lama else {}
         
-        # Pembacaan struktur lama agar kompatibel
         def_akademik = komp_lama.get('akademik', {})
         def_pribadi = komp_lama.get('kepribadian', {})
         def_absen = komp_lama.get('absen', {})
-        stat_lama = komp_lama.get('status', '-')
         catatan_lama = komp_lama.get('catatan', '')
         
-        # ==========================================
-        # FORM INPUT NILAI LENGKAP
-        # ==========================================
         with st.form("form_nilai"):
-            col1, col2 = st.columns(2)
+            st.subheader("📊 Nilai Akademik & Deskripsi Narasi Otomatis")
+            st.caption("Sistem akan otomatis menghitung Predikat (A-D) dan deskripsi capaian pembelajaran.")
             
-            with col1:
-                st.subheader("📊 Nilai Akademik")
-                nilai_akademik_input = {}
-                
-                # Render mapel otomatis
-                for mapel in mapel_list:
-                    val_awal = int(def_akademik.get(mapel, 0))
-                    nilai_akademik_input[mapel] = st.number_input(mapel, min_value=0, max_value=100, value=val_awal, step=1)
+            nilai_akademik_input = {}
+            narasi_akademik = {}
             
-            with col2:
-                st.subheader("🌱 Kepribadian")
+            # Form Nilai Angka per Mapel
+            for mapel in mapel_list:
+                c_m1, c_m2 = st.columns([1, 2])
+                with c_m1:
+                    val_lama = int(def_akademik.get(mapel, 75))
+                    val_input = st.number_input(f"Nilai {mapel}", min_value=0, max_value=100, value=val_lama, step=1)
+                    nilai_akademik_input[mapel] = val_input
+                with c_m2:
+                    pred, desk = hitung_predikat_dan_deskripsi(val_input, mapel)
+                    narasi_akademik[mapel] = {"predikat": pred, "deskripsi": desk}
+                    st.markdown(f"**Predikat [{pred}]**: *{desk}*")
+                st.markdown("<hr style='margin: 5px 0;'>", unsafe_allow_html=True)
+            
+            col_bawah1, col_bawah2 = st.columns(2)
+            
+            with col_bawah1:
+                st.subheader("🌱 Kepribadian & Sikap")
                 c_p1, c_p2, c_p3 = st.columns(3)
                 opsi_pribadi = ["A", "B", "C", "D"]
-                def get_idx(val): return opsi_pribadi.index(val) if val in opsi_pribadi else 1
+                get_idx = lambda val: opsi_pribadi.index(val) if val in opsi_pribadi else 1
                 
                 with c_p1: kelakuan = st.selectbox("Kelakuan", opsi_pribadi, index=get_idx(def_pribadi.get("Kelakuan", "B")))
                 with c_p2: kerajinan = st.selectbox("Kerajinan", opsi_pribadi, index=get_idx(def_pribadi.get("Kerajinan", "B")))
                 with c_p3: kebersihan = st.selectbox("Kebersihan", opsi_pribadi, index=get_idx(def_pribadi.get("Kebersihan", "B")))
                 
+            with col_bawah2:
                 st.subheader("📅 Ketidakhadiran (Hari)")
                 c_a1, c_a2, c_a3 = st.columns(3)
                 with c_a1: sakit = st.number_input("Sakit", min_value=0, value=int(def_absen.get("Sakit", 0)), step=1)
                 with c_a2: izin = st.number_input("Izin", min_value=0, value=int(def_absen.get("Izin", 0)), step=1)
                 with c_a3: alpa = st.number_input("Alpa", min_value=0, value=int(def_absen.get("Alpa", 0)), step=1)
-                
-                st.subheader("📜 Keputusan & Catatan")
-                
-                stat_dasar, kelas_lama = "-", ""
-                if "Naik" in stat_lama: stat_dasar = "Naik Kelas"; kelas_lama = stat_lama.replace("Naik Kelas", "").strip()
-                elif "Tinggal" in stat_lama: stat_dasar = "Tinggal di Kelas"; kelas_lama = stat_lama.replace("Tinggal di Kelas", "").strip()
-                elif "LULUS" in stat_lama: stat_dasar = "LULUS"
 
-                col_stat1, col_stat2 = st.columns(2)
-                with col_stat1:
-                    opsi_status = ["-", "Naik Kelas", "Tinggal di Kelas", "LULUS"]
-                    idx_status = opsi_status.index(stat_dasar) if stat_dasar in opsi_status else 0
-                    status_pilihan = st.selectbox("Status Akhir", opsi_status, index=idx_status)
-                    
-                with col_stat2:
-                    if status_pilihan in ["Naik Kelas", "Tinggal di Kelas"]:
-                        list_kelas = list(kelas_mapel.keys()) if kelas_mapel else [kelas_santri]
-                        if getattr(db, 'role', '') == "wali_kelas" and getattr(db, 'kelas_binaan', ''):
-                            kelas_tujuan = st.selectbox("Ke/Di Kelas", [db.kelas_binaan], disabled=True)
-                        else:
-                            idx_kelas = list_kelas.index(kelas_lama) if kelas_lama in list_kelas else 0
-                            kelas_tujuan = st.selectbox("Ke/Di Kelas", list_kelas, index=idx_kelas)
-                    else: kelas_tujuan = ""
-                        
-                catatan = st.text_area("Catatan Wali Kelas", value=catatan_lama)
+            st.subheader("📜 Catatan Wali Kelas")
+            catatan = st.text_area("Catatan Perkembangan Santri", value=catatan_lama)
 
-            if st.form_submit_button("🔄 Update Nilai" if nilai_lama else "🧮 Simpan Nilai Baru"):
-                status_final = f"{status_pilihan} {kelas_tujuan}".strip() if status_pilihan in ["Naik Kelas", "Tinggal di Kelas"] else status_pilihan
-                
-                jumlah = sum(nilai_akademik_input.values())
-                rata_rata = jumlah / len(nilai_akademik_input) if len(nilai_akademik_input) > 0 else 0
-                
+            # -------------------------------------------------------------
+            # CALCULATOR OTOMATIS KENAIKAN KELAS
+            # -------------------------------------------------------------
+            jumlah = sum(nilai_akademik_input.values())
+            rata_rata = jumlah / len(nilai_akademik_input) if nilai_akademik_input else 0
+            mapel_dibawah_kkm = sum(1 for v in nilai_akademik_input.values() if v < 60)
+            sikap_baik = kelakuan in ["A", "B"] and kerajinan in ["A", "B"]
+            
+            status_otomatis, ket_otomatis = hitung_keputusan_otomatis(
+                rata_rata, mapel_dibawah_kkm, alpa, sikap_baik, kelas_santri
+            )
+            
+            st.markdown("---")
+            st.subheader("🤖 Keputusan Kenaikan Kelas (Dihitung Sistem Otomatis)")
+            if "NAIK" in status_otomatis or "LULUS" in status_otomatis:
+                st.success(f"🏆 **{status_otomatis}** — {ket_otomatis}")
+            else:
+                st.error(f"⚠️ **{status_otomatis}** — {ket_otomatis}")
+
+            if st.form_submit_button("💾 Simpan Penilaian & Keputusan Sistem"):
                 wadah_komponen = {
                     "akademik": nilai_akademik_input,
+                    "narasi_akademik": narasi_akademik,
                     "kepribadian": {"Kelakuan": kelakuan, "Kerajinan": kerajinan, "Kebersihan": kebersihan},
                     "absen": {"Sakit": sakit, "Izin": izin, "Alpa": alpa},
                     "catatan": catatan, 
-                    "status": status_final
+                    "status": status_otomatis
                 }
 
                 data_simpan = {
