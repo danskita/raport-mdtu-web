@@ -19,7 +19,7 @@ def render(db):
     pengaturan_lama = db.data_lembaga.get("pengaturan_master") or {}
     kelas_mapel = pengaturan_lama.get("kelas_mapel", {})
     
-    # PERUBAHAN: Draf Standar Nasional Kurikulum TKA A/B, TPA A/B (Revisi Terbaru), MDTU 1-4
+    # Draf Standar Nasional Kurikulum TKA A/B, TPA A/B, MDTU 1-4
     teks_default_nasional = """TKA A : Qira'ati / Iqro / Tilawati, Tahfidz, Doa dan Dzikir Harian, Dinul Islam / Aqidah Akhlak, Fiqih Ibadah, Khat / Imla, Tarikh / Sejarah Islam
 TKA B : Qira'ati / Iqro / Tilawati, Tahfidz, Doa dan Dzikir Harian, Dinul Islam / Aqidah Akhlak, Fiqih Ibadah, Khat / Imla, Tarikh / Sejarah Islam
 TPA A : Qira'ati / Iqro / Tilawati, Tahfidz, Doa dan Dzikir Harian, Dinul Islam / Aqidah Akhlak, Fiqih Ibadah, Khat / Imla, Tarikh / Sejarah Islam
@@ -98,16 +98,17 @@ MDTU 4 : Al-Qur'an Hadits, Aqidah Akhlak, Fiqih, Sejarah Kebudayaan Islam, Bahas
                     kelas_binaan = st.text_input("Kelas Binaan", placeholder="Contoh: TKA A, TPA B, MDTU 1")
 
                 st.markdown("---")
-                st.markdown("#### 💳 2. Kelengkapan Biodata (Sesuai KTP)")
+                st.markdown("#### 💳 2. Kelengkapan Biodata Dasar")
+                st.info("Catatan: Identitas lengkap akan diisi mandiri oleh Guru di tab Profil Guru.")
                 col3, col4 = st.columns(2)
                 with col3:
-                    nik = st.text_input("NIK")
-                    tempat_lahir = st.text_input("Tempat Lahir")
+                    nik = st.text_input("NIK (Opsional)")
+                    tempat_lahir = st.text_input("Tempat Lahir (Opsional)")
                     tgl_lahir = st.date_input("Tanggal Lahir", value=date(1990, 1, 1))
                     jk = st.selectbox("Jenis Kelamin", ["Laki-laki", "Perempuan"])
                 with col4:
-                    no_hp = st.text_input("Nomor WhatsApp Aktif")
-                    alamat = st.text_area("Alamat Lengkap")
+                    no_hp = st.text_input("Nomor WhatsApp Aktif (Opsional)")
+                    alamat = st.text_area("Alamat Lengkap (Opsional)")
                 
                 if st.form_submit_button("Simpan Akun Guru"):
                     if not nama_guru or not username or not password:
