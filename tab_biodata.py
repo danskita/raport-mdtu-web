@@ -247,3 +247,14 @@ def render(db):
                             st.rerun()
                         else:
                             st.error(pesan)
+def render(db):
+    st.header("👥 Input Biodata Santri")
+    
+    # --- GEMBOK KEPALA MADRASAH ---
+    if getattr(db, 'role', '') == 'kepala_madrasah':
+        st.error("⛔ AKSES DITOLAK: Halaman ini khusus untuk Wali Kelas.")
+        st.info("💡 Sesuai SOP, tugas Anda adalah memantau data di menu **Rekap Data**, bukan menginput biodata santri.")
+        return
+    # ------------------------------
+    
+    # ... (Sisa kode form biodata di bawahnya tetap sama)

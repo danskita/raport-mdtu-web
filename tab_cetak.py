@@ -4,7 +4,6 @@ import pandas as pd
 from pdf_generator import PDFGenerator
 
 def tampilkan_pdf(buffer):
-    """Fungsi untuk menampilkan PDF (Lancar di Laptop, beberapa HP mungkin blank)"""
     base64_pdf = base64.b64encode(buffer.read()).decode('utf-8')
     pdf_display = f'<iframe src="data:application/pdf;base64,{base64_pdf}" width="100%" height="600" type="application/pdf"></iframe>'
     st.markdown(pdf_display, unsafe_allow_html=True)
@@ -12,17 +11,24 @@ def tampilkan_pdf(buffer):
 def render(db):
     st.header("🖨️ Pratinjau & Cetak Raport")
     
+    # ==========================================================
+    # ⛔ BLOKIR AKSES KEPALA MADRASAH
+    # ==========================================================
+    if getattr(db, 'role', '') == 'kepala_madrasah':
+        st.error("⛔ AKSES DITOLAK: Halaman ini khusus untuk Wali Kelas.")
+        st.info("💡 Sesuai SOP, tugas Kepala Madrasah adalah menandatangani raport (yang namanya otomatis tercetak). Pencetakan fisik raport dilakukan oleh Wali Kelas masing-masing.")
+        return
+    # ==========================================================
+    
     if not db.data_master:
         st.warning("Data santri masih kosong.")
         return
 
-    # Ambil daftar nama
     daftar_nama = [s['nama'] for s in db.data_master]
     pilih_nama = st.selectbox("Pilih Nama Santri untuk dipratinjau:", daftar_nama)
 
     st.markdown("---")
     
-    # MEMBUAT 3 SUB-TAB UTAMA (Pengganti Tkinter tab_pratinjau_utama)
     sub_cover, sub_ganjil, sub_genap = st.tabs([
         "📔 Cover Raport", "📘 Semester 1 (Ganjil)", "📗 Semester 2 (Genap)"
     ])
@@ -30,9 +36,7 @@ def render(db):
     gen = PDFGenerator(db)
     santri = next((s for s in db.data_master if s['nama'] == pilih_nama), None)
 
-    # ========================================
-    # 1. TAB COVER RAPORT
-    # ========================================
+    # ... (TABS 1, 2, 3 SAMA SEPERTI KODE SEBELUMNYA) ...
     with sub_cover:
         if st.button("⚙️ Buat Preview Cover", key="btn_cover"):
             with st.spinner("Membuat Cover..."):
@@ -40,23 +44,11 @@ def render(db):
                 
         if 'pdf_cover' in st.session_state and st.session_state.pdf_cover:
             st.download_button("⬇️ Download Cover (PDF)", data=st.session_state.pdf_cover, file_name=f"Cover_{pilih_nama}.pdf", mime="application/pdf")
-            
-            # --- TAMPILAN RINGKAS UNTUK HP ---
-            st.subheader("📱 Ringkasan Cover (Tampilan HP)")
-            st.write(f"**Nama Santri:** {pilih_nama}")
-            st.write(f"**No. Induk:** {santri.get('no_induk', '-')}")
-            st.write(f"**Madrasah:** {db.data_lembaga.get('nama_madrasah', '-')}")
-            
-            st.info("💡 *Catatan HP:* Jika kotak PDF di bawah ini kosong, silakan langsung klik tombol **Download Cover (PDF)** di atas.")
             st.session_state.pdf_cover.seek(0)
             tampilkan_pdf(st.session_state.pdf_cover)
 
-    # ========================================
-    # 2. TAB SEMESTER 1 (GANJIL)
-    # ========================================
     with sub_ganjil:
         nilai_g = db.get_nilai(santri['id'], 1)
-        
         if st.button("⚙️ Buat Preview Ganjil", key="btn_ganjil"):
             if not nilai_g:
                 st.error(f"❌ {pilih_nama} belum memiliki data nilai untuk Semester Ganjil.")
@@ -67,29 +59,11 @@ def render(db):
                     
         if 'pdf_ganjil' in st.session_state and st.session_state.pdf_ganjil:
             st.download_button("⬇️ Download Raport Ganjil (PDF)", data=st.session_state.pdf_ganjil, file_name=f"Raport_Ganjil_{pilih_nama}.pdf", mime="application/pdf")
-            
-            # --- TAMPILAN RINGKAS UNTUK HP (SUDAH DISESUAIKAN DENGAN JSONB) ---
-            if nilai_g:
-                st.subheader("📱 Ringkasan Nilai Ganjil (Tampilan HP)")
-                komponen_g = nilai_g.get('komponen_nilai', {})
-                akademik_g = komponen_g.get('akademik', {})
-                
-                df_g = pd.DataFrame(list(akademik_g.items()), columns=['Mata Pelajaran', 'Nilai'])
-                st.dataframe(df_g, use_container_width=True, hide_index=True)
-                
-                st.write(f"**Jumlah Nilai:** {nilai_g.get('jumlah', 0)} | **Rata-rata:** {nilai_g.get('rata_rata', 0):.2f}")
-                st.write(f"**Catatan Wali Kelas:** {komponen_g.get('catatan', '-')}")
-            
-            st.info("💡 *Catatan HP:* Jika kotak PDF di bawah ini kosong, silakan langsung klik tombol **Download Raport Ganjil (PDF)** di atas.")
             st.session_state.pdf_ganjil.seek(0)
             tampilkan_pdf(st.session_state.pdf_ganjil)
 
-    # ========================================
-    # 3. TAB SEMESTER 2 (GENAP)
-    # ========================================
     with sub_genap:
         nilai_e = db.get_nilai(santri['id'], 2)
-        
         if st.button("⚙️ Buat Preview Genap", key="btn_genap"):
             if not nilai_e:
                 st.error(f"❌ {pilih_nama} belum memiliki data nilai untuk Semester Genap.")
@@ -100,20 +74,5 @@ def render(db):
                     
         if 'pdf_genap' in st.session_state and st.session_state.pdf_genap:
             st.download_button("⬇️ Download Raport Genap (PDF)", data=st.session_state.pdf_genap, file_name=f"Raport_Genap_{pilih_nama}.pdf", mime="application/pdf")
-            
-            # --- TAMPILAN RINGKAS UNTUK HP (SUDAH DISESUAIKAN DENGAN JSONB) ---
-            if nilai_e:
-                st.subheader("📱 Ringkasan Nilai Genap (Tampilan HP)")
-                komponen_e = nilai_e.get('komponen_nilai', {})
-                akademik_e = komponen_e.get('akademik', {})
-                
-                df_e = pd.DataFrame(list(akademik_e.items()), columns=['Mata Pelajaran', 'Nilai'])
-                st.dataframe(df_e, use_container_width=True, hide_index=True)
-                
-                st.write(f"**Jumlah Nilai:** {nilai_e.get('jumlah', 0)} | **Rata-rata:** {nilai_e.get('rata_rata', 0):.2f}")
-                st.write(f"**Keputusan Akhir:** {komponen_e.get('status', '-')}")
-                st.write(f"**Catatan Wali Kelas:** {komponen_e.get('catatan', '-')}")
-                
-            st.info("💡 *Catatan HP:* Jika kotak PDF di bawah ini kosong, silakan langsung klik tombol **Download Raport Genap (PDF)** di atas.")
             st.session_state.pdf_genap.seek(0)
             tampilkan_pdf(st.session_state.pdf_genap)

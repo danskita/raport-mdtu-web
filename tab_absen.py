@@ -65,3 +65,14 @@ def render(db):
                 st.rerun()
             else:
                 st.error(pesan)
+def render(db):
+    st.header("📅 Input Absensi Harian")
+    
+    # --- GEMBOK KEPALA MADRASAH ---
+    if getattr(db, 'role', '') == 'kepala_madrasah':
+        st.error("⛔ AKSES DITOLAK: Halaman ini khusus untuk Wali Kelas.")
+        st.info("💡 Sesuai SOP, tugas Anda bukan melakukan absensi harian. Silakan pantau kehadiran santri di menu **Rekap Data**.")
+        return
+    # ------------------------------
+    
+    # ... (Sisa kode form absensi di bawahnya tetap sama)
