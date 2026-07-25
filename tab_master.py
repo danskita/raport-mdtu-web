@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-from datetime import date
+from datetime import date, datetime
 
 def render(db):
     st.header("⚙️ Master Data & Pengaturan")
@@ -11,13 +11,20 @@ def render(db):
 
     st.markdown("---")
     st.subheader("👥 Manajemen Akun & Biodata Guru")
-    st.write("Kelola akses login beserta kelengkapan biodata guru di madrasah Anda.")
+    
+    # Menarik data guru dari database
+    daftar_guru = db.get_semua_guru_lembaga()
 
-    # 1. FORM PENAMBAHAN AKUN & BIODATA
     if getattr(db, 'role', '') == 'admin':
-        with st.expander("➕ Tambah Akun Guru & Biodata KTP", expanded=False):
+        # INI DIA MENU BARUNYA: 3 Tab Navigasi
+        t_tambah, t_edit, t_daftar = st.tabs(["➕ Tambah Guru", "✏️ Edit & Hapus", "📋 Daftar Guru"])
+        
+        # ==========================================
+        # TAB 1: TAMBAH GURU BARU
+        # ==========================================
+        with t_tambah:
+            st.info("Akun yang dibuat akan langsung terhubung dengan madrasah ini.")
             with st.form("form_tambah_guru"):
-                
                 st.markdown("#### 🔐 1. Data Hak Akses & Login")
                 col1, col2 = st.columns(2)
                 with col1:
@@ -44,11 +51,10 @@ def render(db):
                 
                 if submit_guru:
                     if not nama_guru or not username or not password:
-                        st.error("❌ Nama, Username, dan Password pada bagian Data Login wajib diisi!")
+                        st.error("❌ Nama, Username, dan Password wajib diisi!")
                     elif role == "wali_kelas" and not kelas_binaan:
                         st.error("❌ Kelas Binaan wajib diisi untuk seorang Wali Kelas!")
                     else:
-                        # Memasukkan semua data termasuk KTP
                         sukses, pesan = db.tambah_akun_guru(
                             nama_guru, username, password, role, kelas_binaan,
                             nik, jk, tempat_lahir, tgl_lahir, no_hp, alamat
@@ -58,33 +64,126 @@ def render(db):
                             st.rerun()
                         else:
                             st.error(pesan)
-    else:
-        st.info("🔒 Hanya Admin Lembaga yang berhak menambahkan akun guru baru.")
+                            
+        # ==========================================
+        # TAB 2: EDIT & HAPUS GURU
+        # ==========================================
+        with t_edit:
+            if not daftar_guru:
+                st.warning("Belum ada data guru. Silakan tambahkan terlebih dahulu.")
+            else:
+                # Opsi pilihan guru untuk diedit/dihapus
+                dict_guru = {f"{g['nama_guru']} (NIP: {g['username']})": g for g in daftar_guru}
+                pilih_guru = st.selectbox("🔍 Pilih Guru yang ingin diubah/dihapus:", list(dict_guru.keys()))
+                
+                if pilih_guru:
+                    g_data = dict_guru[pilih_guru]
+                    
+                    with st.form("form_edit_guru"):
+                        st.markdown("#### ✏️ Edit Data Guru")
+                        c1, c2 = st.columns(2)
+                        with c1:
+                            e_nama = st.text_input("Nama Lengkap", value=g_data.get('nama_guru', ''))
+                            e_username = st.text_input("NIP / Username", value=g_data.get('username', ''))
+                            e_password = st.text_input("🔑 Password Baru (Kosongkan jika tidak ganti sandi)", type="password")
+                        with c2:
+                            roles = ["guru", "wali_kelas"]
+                            idx_role = roles.index(g_data.get('role', 'guru')) if g_data.get('role') in roles else 0
+                            e_role = st.selectbox("Hak Akses (Role)", roles, index=idx_role)
+                            e_kelas = st.text_input("Kelas Binaan", value=g_data.get('kelas_binaan', '') or "")
+                        
+                        st.markdown("---")
+                        c3, c4 = st.columns(2)
+                        with c3:
+                            e_nik = st.text_input("NIK", value=g_data.get('nik', '') or "")
+                            e_tempat = st.text_input("Tempat Lahir", value=g_data.get('tempat_lahir', '') or "")
+                            
+                            tgl_str = g_data.get('tanggal_lahir')
+                            try:
+                                tgl_val = datetime.strptime(tgl_str, "%Y-%m-%d").date() if tgl_str else date(1990, 1, 1)
+                            except:
+                                tgl_val = date(1990, 1, 1)
+                                
+                            e_tgl = st.date_input("Tanggal Lahir", value=tgl_val)
+                            
+                            jks = ["Laki-laki", "Perempuan"]
+                            jk_val = g_data.get('jenis_kelamin', 'Laki-laki')
+                            idx_jk = jks.index(jk_val) if jk_val in jks else 0
+                            e_jk = st.selectbox("Jenis Kelamin", jks, index=idx_jk)
+                            
+                        with c4:
+                            e_hp = st.text_input("No HP / WhatsApp", value=g_data.get('no_hp', '') or "")
+                            e_alamat = st.text_area("Alamat Lengkap", value=g_data.get('alamat', '') or "")
+                            
+                        submit_edit = st.form_submit_button("💾 Simpan Perubahan Data")
+                        
+                        if submit_edit:
+                            if not e_nama or not e_username:
+                                st.error("❌ Nama dan Username tidak boleh kosong!")
+                            else:
+                                sukses, pesan = db.update_akun_guru(
+                                    g_data['id'], e_nama, e_username, e_password, e_role, e_kelas,
+                                    e_nik, e_jk, e_tempat, e_tgl, e_hp, e_alamat
+                                )
+                                if sukses:
+                                    st.success(pesan)
+                                    st.rerun()
+                                else:
+                                    st.error(pesan)
+                                    
+                    # TOMBOL HAPUS AKUN
+                    st.markdown("---")
+                    st.markdown("#### 🗑️ Hapus Akun Secara Permanen")
+                    st.error("⚠️ Menghapus akun akan menghilangkan akses login guru tersebut secara permanen.")
+                    konfirmasi = st.checkbox(f"Saya yakin ingin menghapus akun **{g_data['nama_guru']}**")
+                    
+                    if st.button("🗑️ Hapus Akun Guru Ini"):
+                        if konfirmasi:
+                            sukses, pesan = db.hapus_akun_guru(g_data['id'])
+                            if sukses:
+                                st.success(pesan)
+                                st.rerun()
+                            else:
+                                st.error(pesan)
+                        else:
+                            st.warning("Silakan centang kotak konfirmasi terlebih dahulu!")
+                            
+        # ==========================================
+        # TAB 3: DAFTAR GURU
+        # ==========================================
+        with t_daftar:
+            if daftar_guru:
+                df_guru = pd.DataFrame(daftar_guru)
+                kolom_tampil = ['nama_guru', 'username', 'role', 'kelas_binaan', 'jenis_kelamin', 'no_hp']
+                kolom_ada = [col for col in kolom_tampil if col in df_guru.columns]
+                
+                df_display = df_guru[kolom_ada].copy()
+                df_display.rename(columns={
+                    'nama_guru': 'Nama Lengkap',
+                    'username': 'Username/NIP',
+                    'role': 'Akses',
+                    'kelas_binaan': 'Wali Kelas',
+                    'jenis_kelamin': 'L/P',
+                    'no_hp': 'No. WhatsApp'
+                }, inplace=True)
+                
+                df_display.index = df_display.index + 1 
+                st.dataframe(df_display, use_container_width=True)
+            else:
+                st.info("Belum ada data guru.")
 
-    st.markdown("<br>", unsafe_allow_html=True)
-
-    # 2. TABEL DAFTAR GURU
-    st.markdown("### 📋 Daftar Guru & Wali Kelas")
-    daftar_guru = db.get_semua_guru_lembaga()
-    
-    if daftar_guru:
-        df_guru = pd.DataFrame(daftar_guru)
-        
-        # Menampilkan kolom-kolom penting ke layar (termasuk No HP agar mudah dihubungi)
-        kolom_tampil = ['nama_guru', 'username', 'role', 'kelas_binaan', 'jenis_kelamin', 'no_hp']
-        kolom_ada = [col for col in kolom_tampil if col in df_guru.columns]
-        
-        df_display = df_guru[kolom_ada].copy()
-        df_display.rename(columns={
-            'nama_guru': 'Nama Lengkap',
-            'username': 'Username/NIP',
-            'role': 'Akses',
-            'kelas_binaan': 'Wali Kelas',
-            'jenis_kelamin': 'L/P',
-            'no_hp': 'No. WhatsApp'
-        }, inplace=True)
-        
-        df_display.index = df_display.index + 1 
-        st.dataframe(df_display, use_container_width=True)
     else:
-        st.warning("Belum ada data guru yang ditambahkan di lembaga ini.")
+        st.info("🔒 Hanya Admin Lembaga yang berhak mengelola akun guru.")
+        if daftar_guru:
+            df_guru = pd.DataFrame(daftar_guru)
+            kolom_tampil = ['nama_guru', 'role', 'kelas_binaan', 'no_hp']
+            kolom_ada = [col for col in kolom_tampil if col in df_guru.columns]
+            df_display = df_guru[kolom_ada].copy()
+            df_display.rename(columns={
+                'nama_guru': 'Nama Lengkap',
+                'role': 'Akses',
+                'kelas_binaan': 'Wali Kelas',
+                'no_hp': 'No. WhatsApp'
+            }, inplace=True)
+            df_display.index = df_display.index + 1 
+            st.dataframe(df_display, use_container_width=True)
