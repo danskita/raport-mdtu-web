@@ -25,18 +25,40 @@ def render(db):
     if pilih_nama:
         santri_aktif = map_santri[pilih_nama]
         santri_id = santri_aktif["id"]
-        kelas_santri = santri_aktif.get("data_lengkap", {}).get("kelas_santri", "").strip()
         
+        # ==========================================================
+        # PERBAIKAN: DETEKSI KELAS SUPER KUAT (ANTI GAGAL)
+        # ==========================================================
+        data_lengkap = santri_aktif.get("data_lengkap", {})
+        
+        # Coba cari dari 'kelas_santri', lalu dari 'kelas'
+        kelas_santri = str(data_lengkap.get("kelas_santri", data_lengkap.get("kelas", ""))).strip()
+        
+        # JIKA TETAP KOSONG, pinjam kelas dari akun Wali Kelas yang sedang login!
+        if not kelas_santri and getattr(db, 'kelas_binaan', None):
+            kelas_santri = db.kelas_binaan
+            
         st.info(f"👤 **Santri:** {pilih_nama} | **Kelas:** {kelas_santri}")
         
         # Tarik pengaturan Master Data untuk Kelas & Mapel
         pengaturan = db.data_lembaga.get("pengaturan_master") or {}
         kelas_mapel = pengaturan.get("kelas_mapel", {})
-        mapel_list = kelas_mapel.get(kelas_santri, [])
         
+        mapel_list = []
+        kelas_santri_bersih = kelas_santri.upper().replace(" ", "")
+        
+        for kls, mapels in kelas_mapel.items():
+            kls_bersih = str(kls).upper().replace(" ", "")
+            if kls_bersih == kelas_santri_bersih:
+                mapel_list = mapels
+                break
+        
+        # Jika Mapel tetap tidak ditemukan
         if not mapel_list:
-            st.error(f"❌ Mata pelajaran untuk kelas **{kelas_santri}** belum diatur!")
-            st.warning("💡 **Solusi:** Minta Admin Lembaga untuk menambahkan mata pelajaran untuk kelas ini di menu **Master Data & Pengaturan**.")
+            st.error(f"❌ Mata pelajaran untuk kelas **{kelas_santri}** tidak ditemukan di sistem!")
+            st.warning("💡 **Solusi:** Pastikan Admin Lembaga sudah mengatur mata pelajaran untuk kelas ini di menu **Master Data**.")
+            kelas_tersedia = list(kelas_mapel.keys()) if kelas_mapel else ["Belum ada kelas yang diatur"]
+            st.info(f"📝 **Daftar Kelas di Master Data saat ini:** {', '.join(kelas_tersedia)}")
             return
 
         # Ambil data nilai yang sudah ada (jika pernah diinput)
@@ -64,7 +86,7 @@ def render(db):
                 st.subheader("📊 Nilai Akademik")
                 nilai_akademik_input = {}
                 
-                # Render mapel otomatis sesuai kelasnya
+                # Render mapel otomatis
                 for mapel in mapel_list:
                     val_awal = int(def_akademik.get(mapel, 0))
                     nilai_akademik_input[mapel] = st.number_input(mapel, min_value=0, max_value=100, value=val_awal, step=1)
@@ -87,16 +109,10 @@ def render(db):
                 
                 st.subheader("📜 Keputusan & Catatan")
                 
-                # Memecah status lama (misal: "Naik Kelas 2A" menjadi "Naik Kelas" dan "2A")
                 stat_dasar, kelas_lama = "-", ""
-                if "Naik" in stat_lama: 
-                    stat_dasar = "Naik Kelas"
-                    kelas_lama = stat_lama.replace("Naik Kelas", "").strip()
-                elif "Tinggal" in stat_lama: 
-                    stat_dasar = "Tinggal di Kelas"
-                    kelas_lama = stat_lama.replace("Tinggal di Kelas", "").strip()
-                elif "LULUS" in stat_lama: 
-                    stat_dasar = "LULUS"
+                if "Naik" in stat_lama: stat_dasar = "Naik Kelas"; kelas_lama = stat_lama.replace("Naik Kelas", "").strip()
+                elif "Tinggal" in stat_lama: stat_dasar = "Tinggal di Kelas"; kelas_lama = stat_lama.replace("Tinggal di Kelas", "").strip()
+                elif "LULUS" in stat_lama: stat_dasar = "LULUS"
 
                 col_stat1, col_stat2 = st.columns(2)
                 with col_stat1:
@@ -106,31 +122,22 @@ def render(db):
                     
                 with col_stat2:
                     if status_pilihan in ["Naik Kelas", "Tinggal di Kelas"]:
-                        # Mengambil daftar semua kelas dari Master Data
                         list_kelas = list(kelas_mapel.keys()) if kelas_mapel else [kelas_santri]
-                        
-                        # Pengunci Dropdown Kelas untuk Wali Kelas
-                        if db.role == "wali_kelas" and db.kelas_binaan:
+                        if getattr(db, 'role', '') == "wali_kelas" and getattr(db, 'kelas_binaan', ''):
                             kelas_tujuan = st.selectbox("Ke/Di Kelas", [db.kelas_binaan], disabled=True)
                         else:
                             idx_kelas = list_kelas.index(kelas_lama) if kelas_lama in list_kelas else 0
                             kelas_tujuan = st.selectbox("Ke/Di Kelas", list_kelas, index=idx_kelas)
-                    else: 
-                        kelas_tujuan = ""
+                    else: kelas_tujuan = ""
                         
                 catatan = st.text_area("Catatan Wali Kelas", value=catatan_lama)
 
-            # Tombol Eksekusi
             if st.form_submit_button("🔄 Update Nilai" if nilai_lama else "🧮 Simpan Nilai Baru"):
-                
-                # Merangkai kembali status akhir
                 status_final = f"{status_pilihan} {kelas_tujuan}".strip() if status_pilihan in ["Naik Kelas", "Tinggal di Kelas"] else status_pilihan
                 
-                # Kalkulasi otomatis
                 jumlah = sum(nilai_akademik_input.values())
                 rata_rata = jumlah / len(nilai_akademik_input) if len(nilai_akademik_input) > 0 else 0
                 
-                # Memasukkan ke dalam satu wadah JSONB yang rapi
                 wadah_komponen = {
                     "akademik": nilai_akademik_input,
                     "kepribadian": {"Kelakuan": kelakuan, "Kerajinan": kerajinan, "Kebersihan": kebersihan},
