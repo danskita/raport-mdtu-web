@@ -1,260 +1,175 @@
 import streamlit as st
-import pandas as pd
-import io
+import pandas as pd    # <--- TAMBAHKAN BARIS INI
+from datetime import date, datetime
 
 def render(db):
-    st.header("👤 Manajemen Biodata Santri")
-    if not db.lembaga_id: 
-        return st.warning("⚠️ Anda belum login.")
+    st.header("👥 Input & Kelola Biodata Santri")
+    st.caption("Khusus Wali Kelas / Guru untuk menginput dan mengedit data santri di kelasnya")
+    
+# ... (sisa kode di bawahnya biarkan saja, tidak perlu diubah) ...
+    
+    # ⛔ BLOKIR KEPALA MADRASAH
+    if getattr(db, 'role', '') == 'kepala_madrasah':
+        st.error("⛔ AKSES DITOLAK: Halaman ini khusus untuk Wali Kelas.")
+        st.info("💡 Sesuai SOP, Kepala Madrasah tidak menginput data santri. Silakan pantau rekap data di menu **Pemantauan & Rekap**.")
+        return
 
-    pengaturan = db.data_lembaga.get("pengaturan_master", {})
-    list_kelas = pengaturan.get("kelas", ["TKA", "TPA", "MDTU"])
-    list_alamat = pengaturan.get("alamat", ["- Belum diatur -"])
+    if not db.lembaga_id:
+        st.warning("⚠️ Anda belum memilih madrasah yang aktif. Silakan kembali ke Profil.")
+        return
 
-    tab_input, tab_impor, tab_edit = st.tabs(["📝 Input Manual", "📥 Impor Excel", "⚙️ Edit & Hapus"])
+    kelas_default = getattr(db, 'kelas_binaan', '') or "TKA A"
 
-    # ==========================================
-    # 1. TAB INPUT MANUAL
-    # ==========================================
-    with tab_input:
-        with st.form("form_biodata"):
-            col1, col2 = st.columns(2)
-            with col1:
-                st.subheader("Identitas Dasar")
-                no_induk = st.text_input("Nomor Induk Santri")
-                nama = st.text_input("Nama Lengkap Santri")
+    t_tambah, t_edit, t_daftar = st.tabs(["➕ Tambah Santri Baru", "✏️ Edit / Hapus Santri", "📋 Daftar Santri Kelas"])
+
+    # ==========================================================
+    # TAB 1: TAMBAH SANTRI BARU
+    # ==========================================================
+    with t_tambah:
+        st.subheader("➕ Form Tambah Santri Baru")
+        with st.form("form_tambah_santri"):
+            c1, c2 = st.columns(2)
+            with c1:
+                no_induk = st.text_input("No. Induk / NIS *")
+                nama = st.text_input("Nama Lengkap Santri *")
                 
-                # --- PENGUNCI DROPDOWN KELAS ---
-                if db.role == "guru" and db.kelas_binaan:
-                    kelas_santri = st.selectbox("Tingkatan Kelas", [db.kelas_binaan], disabled=True)
-                    st.caption(f"🔒 Terkunci: Anda hanya berwenang menambah santri untuk {db.kelas_binaan}.")
+                # Kelas dikunci otomatis sesuai kelas binaan Wali Kelas
+                if getattr(db, 'role', '') == 'wali_kelas' and db.kelas_binaan:
+                    kelas_santri = st.text_input("Kelas Santri", value=db.kelas_binaan, disabled=True)
                 else:
-                    kelas_santri = st.selectbox("Tingkatan Kelas", list_kelas)
+                    kelas_santri = st.text_input("Kelas Santri *", value=kelas_default)
                     
-                desa_kelurahan = st.selectbox("Desa / Kelurahan (Alamat)", list_alamat)
                 jk = st.selectbox("Jenis Kelamin", ["Laki-laki", "Perempuan"])
+                
+            with c2:
                 tempat_lahir = st.text_input("Tempat Lahir")
-                tanggal_lahir = st.date_input("Tanggal Lahir")
-                anak_ke = st.text_input("Anak Ke-")
-
-            with col2:
-                st.subheader("Data Orang Tua")
-                nama_ayah = st.text_input("Nama Ayah")
-                pekerjaan_ayah = st.text_input("Pekerjaan Ayah")
-                nama_ibu = st.text_input("Nama Ibu")
-                pekerjaan_ibu = st.text_input("Pekerjaan Ibu")
-
-                st.subheader("Data Wali (Opsional)")
-                nama_wali = st.text_input("Nama Wali")
-                pekerjaan_wali = st.text_input("Pekerjaan Wali")
-
-            submit_tambah = st.form_submit_button("💾 Simpan Biodata", type="primary")
+                tgl_lahir = st.date_input("Tanggal Lahir", value=date(2018, 1, 1))
+                nama_ayah = st.text_input("Nama Ayah Kandung")
+                nama_ibu = st.text_input("Nama Ibu Kandung")
+                
+            no_hp = st.text_input("No. HP / WhatsApp Orang Tua")
+            alamat = st.text_area("Alamat Lengkap Tempat Tinggal")
             
-            if submit_tambah:
-                if not no_induk or not nama: 
-                    st.error("Nomor Induk dan Nama wajib diisi!")
+            submit_santri = st.form_submit_button("💾 Simpan Santri Baru")
+            
+            if submit_santri:
+                if not no_induk or not nama:
+                    st.error("❌ No. Induk dan Nama Lengkap wajib diisi!")
                 else:
                     data_lengkap = {
-                        "kelas_santri": kelas_santri, "jenis_kelamin": jk, "tempat_lahir": tempat_lahir,
-                        "tanggal_lahir": str(tanggal_lahir), "anak_ke": anak_ke, "desa_kelurahan": desa_kelurahan,
-                        "nama_ayah": nama_ayah, "pekerjaan_ayah": pekerjaan_ayah, "nama_ibu": nama_ibu,
-                        "pekerjaan_ibu": pekerjaan_ibu, "nama_wali": nama_wali, "pekerjaan_wali": pekerjaan_wali
+                        "kelas_santri": kelas_santri,
+                        "tempat_lahir": tempat_lahir,
+                        "tanggal_lahir": str(tgl_lahir),
+                        "jenis_kelamin": jk,
+                        "nama_ayah": nama_ayah,
+                        "nama_ibu": nama_ibu,
+                        "no_hp": no_hp,
+                        "alamat": alamat
                     }
                     sukses, pesan = db.simpan_biodata(no_induk, nama, data_lengkap)
-                    if sukses: 
-                        st.success(pesan)
+                    if sukses:
+                        st.success(f"✅ {pesan}")
                         st.rerun()
-                    else: 
-                        st.error(pesan)
-
-    # ==========================================
-    # 2. TAB IMPOR EXCEL
-    # ==========================================
-    with tab_impor:
-        st.subheader("Impor Puluhan Data Sekaligus")
-        st.info("Unduh template Excel di bawah ini, isi data santri, lalu unggah kembali ke sistem.")
-        
-        # Buat template Excel di memori (Sesuai dengan kolom lengkap)
-        template_df = pd.DataFrame({
-            "No Induk": ["12345", "12346"],
-            "Nama Lengkap": ["Ahmad Fulan", "Siti Fulanah"],
-            "Kelas": [list_kelas[0] if list_kelas else "Kelas 1", list_kelas[0] if list_kelas else "Kelas 1"],
-            "Desa/Kelurahan": [list_alamat[0] if list_alamat else "Desa A", list_alamat[0] if list_alamat else "Desa A"],
-            "Jenis Kelamin (Laki-laki/Perempuan)": ["Laki-laki", "Perempuan"],
-            "Tempat Lahir": ["Jakarta", "Bandung"],
-            "Tanggal Lahir (YYYY-MM-DD)": ["2015-05-12", "2016-08-20"],
-            "Anak Ke-": ["1", "2"],
-            "Nama Ayah": ["Budi", "Joko"],
-            "Pekerjaan Ayah": ["Wiraswasta", "PNS"],
-            "Nama Ibu": ["Ani", "Wati"],
-            "Pekerjaan Ibu": ["Ibu Rumah Tangga", "Guru"],
-            "Nama Wali": ["", ""],
-            "Pekerjaan Wali": ["", ""]
-        })
-        
-        buffer = io.BytesIO()
-        with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
-            template_df.to_excel(writer, index=False, sheet_name='Template_Santri')
-        
-        st.download_button(
-            label="⬇️ Unduh Template Excel",
-            data=buffer.getvalue(),
-            file_name="Template_Impor_Santri_Lengkap.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        )
-        
-        st.markdown("---")
-        file_upload = st.file_uploader("Unggah File Excel yang sudah diisi", type=["xlsx", "xls"])
-        
-        if file_upload:
-            try:
-                df_upload = pd.read_excel(file_upload)
-                st.write("🔍 Pratinjau Data:")
-                st.dataframe(df_upload, height=200)
-                
-                if st.button("🚀 Proses Impor Data Sekarang", type="primary"):
-                    list_bulk = []
-                    for idx, row in df_upload.iterrows():
-                        no_induk = str(row.get("No Induk", ""))
-                        nama = str(row.get("Nama Lengkap", ""))
-                        if not nama or nama == "nan" or not no_induk or no_induk == "nan": 
-                            continue
-                        
-                        kelas_import = str(row.get("Kelas", ""))
-                        # PENGUNCI GURU PADA IMPOR EXCEL (mencegah guru import kelas lain)
-                        if db.role == "guru" and db.kelas_binaan:
-                            kelas_import = db.kelas_binaan
-
-                        data_lengkap = {
-                            "kelas_santri": kelas_import,
-                            "desa_kelurahan": str(row.get("Desa/Kelurahan", "")),
-                            "jenis_kelamin": str(row.get("Jenis Kelamin (Laki-laki/Perempuan)", "")),
-                            "tempat_lahir": str(row.get("Tempat Lahir", "")),
-                            "tanggal_lahir": str(row.get("Tanggal Lahir (YYYY-MM-DD)", "")),
-                            "anak_ke": str(row.get("Anak Ke-", "")),
-                            "nama_ayah": str(row.get("Nama Ayah", "")),
-                            "pekerjaan_ayah": str(row.get("Pekerjaan Ayah", "")),
-                            "nama_ibu": str(row.get("Nama Ibu", "")),
-                            "pekerjaan_ibu": str(row.get("Pekerjaan Ibu", "")),
-                            "nama_wali": str(row.get("Nama Wali", "")),
-                            "pekerjaan_wali": str(row.get("Pekerjaan Wali", ""))
-                        }
-                        # Bersihkan nilai NaN menjadi string kosong
-                        for k, v in data_lengkap.items():
-                            if v == "nan": data_lengkap[k] = ""
-
-                        list_bulk.append({
-                            "no_induk": no_induk,
-                            "nama": nama,
-                            "data_lengkap": data_lengkap
-                        })
-                    
-                    if list_bulk:
-                        sukses, pesan = db.simpan_bulk_biodata(list_bulk)
-                        if sukses:
-                            st.success(pesan)
-                            st.rerun()
-                        else:
-                            st.error(pesan)
                     else:
-                        st.warning("Tidak ada data valid yang ditemukan dalam file Excel.")
-                        
-            except Exception as e:
-                st.error(f"Gagal membaca file Excel: Pastikan formatnya sesuai template. Error: {e}")
+                        st.error(f"❌ {pesan}")
 
-    # ==========================================
-    # 3. TAB EDIT & HAPUS
-    # ==========================================
-    with tab_edit:
-        st.subheader("Edit atau Hapus Data Santri")
-        
+    # ==========================================================
+    # TAB 2: EDIT / HAPUS SANTRI
+    # ==========================================================
+    with t_edit:
+        st.subheader("✏️ Edit atau Hapus Data Santri")
         if not db.data_master:
-            st.info("Belum ada data santri yang tersimpan.")
+            st.info("Belum ada santri terdaftar di kelas ini.")
         else:
-            map_santri = {f"{s['nama']} ({s.get('no_induk', '-')}) - Kelas {s.get('data_lengkap', {}).get('kelas_santri', '-')}": s for s in db.data_master}
-            pilih_santri = st.selectbox("Pilih Santri yang ingin dikelola:", list(map_santri.keys()))
+            map_santri = {f"{s['nama']} (No. Induk: {s.get('no_induk', '-')})": s for s in db.data_master}
+            pilih_santri_str = st.selectbox("🔍 Pilih Santri yang ingin diubah/dihapus:", list(map_santri.keys()))
             
-            if pilih_santri:
-                santri = map_santri[pilih_santri]
-                dl = santri.get("data_lengkap", {})
+            if pilih_santri_str:
+                s_data = map_santri[pilih_santri_str]
+                d_lengkap = s_data.get("data_lengkap", {})
                 
                 with st.form("form_edit_santri"):
                     c1, c2 = st.columns(2)
                     with c1:
-                        st.subheader("Identitas Dasar")
-                        e_no_induk = st.text_input("Nomor Induk Santri", value=santri.get("no_induk", ""))
-                        e_nama = st.text_input("Nama Lengkap Santri", value=santri.get("nama", ""))
+                        e_no_induk = st.text_input("No. Induk / NIS", value=s_data.get("no_induk", ""))
+                        e_nama = st.text_input("Nama Lengkap", value=s_data.get("nama", ""))
+                        e_kelas = st.text_input("Kelas Santri", value=d_lengkap.get("kelas_santri", db.kelas_binaan or ""))
                         
-                        # --- PENGUNCI DROPDOWN KELAS ---
-                        if db.role == "guru" and db.kelas_binaan:
-                            e_kelas_santri = st.selectbox("Tingkatan Kelas", [db.kelas_binaan], disabled=True)
-                        else:
-                            try: idx_kelas = list_kelas.index(dl.get("kelas_santri"))
-                            except: idx_kelas = 0
-                            e_kelas_santri = st.selectbox("Tingkatan Kelas", list_kelas, index=idx_kelas if list_kelas else 0)
-                            
-                        try: idx_alamat = list_alamat.index(dl.get("desa_kelurahan"))
-                        except: idx_alamat = 0
-                        e_desa_kelurahan = st.selectbox("Desa / Kelurahan (Alamat)", list_alamat, index=idx_alamat if list_alamat else 0)
+                        jks = ["Laki-laki", "Perempuan"]
+                        jk_val = d_lengkap.get("jenis_kelamin", "Laki-laki")
+                        idx_jk = jks.index(jk_val) if jk_val in jks else 0
+                        e_jk = st.selectbox("Jenis Kelamin", jks, index=idx_jk)
                         
-                        idx_jk = 0 if dl.get("jenis_kelamin") == "Laki-laki" else 1 if dl.get("jenis_kelamin") == "Perempuan" else 0
-                        e_jk = st.selectbox("Jenis Kelamin", ["Laki-laki", "Perempuan"], index=idx_jk)
-                        
-                        e_tempat_lahir = st.text_input("Tempat Lahir", value=dl.get("tempat_lahir", ""))
-                        e_tanggal_lahir = st.text_input("Tanggal Lahir (YYYY-MM-DD)", value=dl.get("tanggal_lahir", ""))
-                        e_anak_ke = st.text_input("Anak Ke-", value=dl.get("anak_ke", ""))
-
                     with c2:
-                        st.subheader("Data Orang Tua")
-                        e_nama_ayah = st.text_input("Nama Ayah", value=dl.get("nama_ayah", ""))
-                        e_pekerjaan_ayah = st.text_input("Pekerjaan Ayah", value=dl.get("pekerjaan_ayah", ""))
-                        e_nama_ibu = st.text_input("Nama Ibu", value=dl.get("nama_ibu", ""))
-                        e_pekerjaan_ibu = st.text_input("Pekerjaan Ibu", value=dl.get("pekerjaan_ibu", ""))
-
-                        st.subheader("Data Wali (Opsional)")
-                        e_nama_wali = st.text_input("Nama Wali", value=dl.get("nama_wali", ""))
-                        e_pekerjaan_wali = st.text_input("Pekerjaan Wali", value=dl.get("pekerjaan_wali", ""))
-
-                    st.markdown("---")
-                    col_btn1, col_btn2 = st.columns(2)
-                    with col_btn1:
-                        submit_edit = st.form_submit_button("💾 Simpan Perubahan", type="primary", use_container_width=True)
-                    with col_btn2:
-                        submit_hapus = st.form_submit_button("🗑️ Hapus Data Santri", use_container_width=True)
+                        e_tempat = st.text_input("Tempat Lahir", value=d_lengkap.get("tempat_lahir", ""))
                         
-                    if submit_edit:
-                        if not e_no_induk or not e_nama:
-                            st.error("Nomor Induk dan Nama wajib diisi!")
-                        else:
-                            data_lengkap_baru = {
-                                "kelas_santri": e_kelas_santri, "jenis_kelamin": e_jk, "tempat_lahir": e_tempat_lahir,
-                                "tanggal_lahir": str(e_tanggal_lahir), "anak_ke": e_anak_ke, "desa_kelurahan": e_desa_kelurahan,
-                                "nama_ayah": e_nama_ayah, "pekerjaan_ayah": e_pekerjaan_ayah, "nama_ibu": e_nama_ibu,
-                                "pekerjaan_ibu": e_pekerjaan_ibu, "nama_wali": e_nama_wali, "pekerjaan_wali": e_pekerjaan_wali
-                            }
-                            # Simpan dengan id santri
-                            sukses, pesan = db.simpan_biodata(e_no_induk, e_nama, data_lengkap_baru, santri_id=santri['id'])
-                            if sukses:
-                                st.success(pesan)
-                                st.rerun()
-                            else:
-                                st.error(pesan)
+                        tgl_str = d_lengkap.get("tanggal_lahir")
+                        try:
+                            tgl_val = datetime.strptime(tgl_str, "%Y-%m-%d").date() if tgl_str else date(2018, 1, 1)
+                        except:
+                            tgl_val = date(2018, 1, 1)
                             
-                    if submit_hapus:
-                        sukses, pesan = db.hapus_biodata(santri['id'])
+                        e_tgl = st.date_input("Tanggal Lahir", value=tgl_val)
+                        e_ayah = st.text_input("Nama Ayah Kandung", value=d_lengkap.get("nama_ayah", ""))
+                        e_ibu = st.text_input("Nama Ibu Kandung", value=d_lengkap.get("nama_ibu", ""))
+                        
+                    e_hp = st.text_input("No. HP / WhatsApp", value=d_lengkap.get("no_hp", ""))
+                    e_alamat = st.text_area("Alamat Lengkap", value=d_lengkap.get("alamat", ""))
+                    
+                    submit_edit = st.form_submit_button("💾 Simpan Perubahan Santri")
+                    
+                    if submit_edit:
+                        data_update = {
+                            "kelas_santri": e_kelas,
+                            "tempat_lahir": e_tempat,
+                            "tanggal_lahir": str(e_tgl),
+                            "jenis_kelamin": e_jk,
+                            "nama_ayah": e_ayah,
+                            "nama_ibu": e_ibu,
+                            "no_hp": e_hp,
+                            "alamat": e_alamat
+                        }
+                        sukses, pesan = db.simpan_biodata(e_no_induk, e_nama, data_update, santri_id=s_data['id'])
                         if sukses:
-                            st.success(pesan)
+                            st.success(f"✅ {pesan}")
                             st.rerun()
                         else:
-                            st.error(pesan)
-def render(db):
-    st.header("👥 Input Biodata Santri")
-    
-    # --- GEMBOK KEPALA MADRASAH ---
-    if getattr(db, 'role', '') == 'kepala_madrasah':
-        st.error("⛔ AKSES DITOLAK: Halaman ini khusus untuk Wali Kelas.")
-        st.info("💡 Sesuai SOP, tugas Anda adalah memantau data di menu **Rekap Data**, bukan menginput biodata santri.")
-        return
-    # ------------------------------
-    
-    # ... (Sisa kode form biodata di bawahnya tetap sama)
+                            st.error(f"❌ {pesan}")
+                            
+                st.markdown("---")
+                st.error("⚠️ Menghapus santri akan menghapus seluruh data nilai dan absensinya secara permanen.")
+                konfirmasi = st.checkbox(f"Saya yakin ingin menghapus santri **{s_data['nama']}**")
+                if st.button("🗑️ Hapus Santri Ini Permanen"):
+                    if konfirmasi:
+                        sukses, pesan = db.hapus_biodata(s_data['id'])
+                        if sukses:
+                            st.success(f"✅ {pesan}")
+                            st.rerun()
+                        else:
+                            st.error(f"❌ {pesan}")
+                    else:
+                        st.warning("Centang kotak konfirmasi terlebih dahulu!")
+
+    # ==========================================================
+    # TAB 3: DAFTAR SANTRI KELAS
+    # ==========================================================
+    with t_daftar:
+        st.subheader(f"📋 Daftar Santri Kelas {db.kelas_binaan if db.kelas_binaan else ''}")
+        if not db.data_master:
+            st.info("Belum ada santri terdaftar di kelas ini.")
+        else:
+            list_tampil = []
+            for s in db.data_master:
+                dl = s.get("data_lengkap", {})
+                list_tampil.append({
+                    "No. Induk": s.get("no_induk", "-"),
+                    "Nama Santri": s.get("nama", "-"),
+                    "L/P": dl.get("jenis_kelamin", "-"),
+                    "Tempat Lahir": dl.get("tempat_lahir", "-"),
+                    "Tgl Lahir": dl.get("tanggal_lahir", "-"),
+                    "Nama Ayah": dl.get("nama_ayah", "-"),
+                    "No. WA Ortu": dl.get("no_hp", "-")
+                })
+            df = pd.DataFrame(list_tampil)
+            df.index = df.index + 1
+            st.dataframe(df, use_container_width=True)

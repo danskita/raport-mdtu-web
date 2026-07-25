@@ -1,10 +1,6 @@
 import streamlit as st
 
-# ==========================================================
-# HELPER STANDAR NASIONAL: PREDIKAT & DESKRIPSI NARASI
-# ==========================================================
 def hitung_predikat_dan_deskripsi(nilai, nama_mapel):
-    """Menghasilkan Predikat (A/B/C/D) & Narasi Capaian Pembelajaran"""
     if nilai >= 86:
         predikat = "A"
         narasi = f"Sangat baik dan sangat menguasai seluruh indikator capaian pada mata pelajaran {nama_mapel}."
@@ -20,34 +16,12 @@ def hitung_predikat_dan_deskripsi(nilai, nama_mapel):
     return predikat, narasi
 
 def hitung_keputusan_otomatis(rata_rata, mapel_dibawah_kkm, alpa, sikap_baik, kelas_sekarang):
-    """
-    Sistem Perhitungan Kenaikan Kelas Otomatis berdasarkan Standar Nasional:
-    1. KKM minimal per mapel = 60
-    2. Maksimal mapel di bawah KKM = 2
-    3. Rata-rata akhir minimal = 60
-    4. Maksimal alpa = 10 hari
-    5. Nilai sikap/kepribadian tidak 'C' atau 'D'
-    """
-    # Peta Urutan Kenaikan Kelas
     urutan_kelas = {
-        "TKA A": "TKA B",
-        "TKA B": "TPA A",
-        "TPA A": "TPA B",
-        "TPA B": "LULUS",
-        "MDTU 1": "MDTU 2",
-        "MDTU 2": "MDTU 3",
-        "MDTU 3": "MDTU 4",
-        "MDTU 4": "LULUS"
+        "TKA A": "TKA B", "TKA B": "TPA A", "TPA A": "TPA B", "TPA B": "LULUS",
+        "MDTU 1": "MDTU 2", "MDTU 2": "MDTU 3", "MDTU 3": "MDTU 4", "MDTU 4": "LULUS"
     }
     
-    # Syarat Kelulusan/Kenaikan
-    syarat_lulus = (
-        rata_rata >= 60 and 
-        mapel_dibawah_kkm <= 2 and 
-        alpa <= 10 and 
-        sikap_baik
-    )
-    
+    syarat_lulus = (rata_rata >= 60 and mapel_dibawah_kkm <= 2 and alpa <= 10 and sikap_baik)
     kelas_bersih = str(kelas_sekarang).upper().strip()
     kelas_tujuan = urutan_kelas.get(kelas_bersih, "LULUS")
     
@@ -66,17 +40,24 @@ def hitung_keputusan_otomatis(rata_rata, mapel_dibawah_kkm, alpa, sikap_baik, ke
         detail_alasan = ", ".join(alasan)
         return f"Tinggal di Kelas {kelas_sekarang}", f"Sistem Menetapkan: TINGGAL DI KELAS ({detail_alasan})"
 
-
 def render(db):
     st.header("📝 Input & Edit Nilai Santri")
+    
+    # ⛔ BLOKIR KEPALA MADRASAH
+    if getattr(db, 'role', '') == 'kepala_madrasah':
+        st.error("⛔ AKSES DITOLAK: Halaman ini khusus untuk Wali Kelas.")
+        st.info("💡 Sesuai SOP, Kepala Madrasah tidak mengisi nilai santri. Silakan pantau rekap data di menu **Pemantauan & Rekap**.")
+        return
+
     st.caption("Sistem Penilaian Standar Nasional dengan Narasi Deskripsi & Kenaikan Kelas Otomatis")
     
     if not db.lembaga_id:
-        st.warning("⚠️ Anda belum memilih madrasah yang aktif. Silakan kembali ke Profil.")
+        st.warning("⚠️ Anda belum memilih madrasah yang aktif.")
         return
         
     if not db.data_master:
-        return st.warning("Belum ada data santri yang terdaftar di kelas/lembaga ini.")
+        st.warning("⚠️ Belum ada data santri di kelas ini. Silakan tambahkan santri terlebih dahulu di menu **Input Biodata**.")
+        return
 
     st.markdown("---")
     map_santri = {s['nama']: s for s in db.data_master}
@@ -101,7 +82,6 @@ def render(db):
             
         st.info(f"👤 **Santri:** {pilih_nama} | **Kelas:** {kelas_santri}")
         
-        # Tarik pengaturan Master Data
         pengaturan = db.data_lembaga.get("pengaturan_master") or {}
         kelas_mapel = pengaturan.get("kelas_mapel", {})
         
@@ -114,8 +94,7 @@ def render(db):
                 break
         
         if not mapel_list:
-            st.error(f"❌ Mata pelajaran untuk kelas **{kelas_santri}** belum diatur!")
-            st.info(f"📝 Kelas yang tersedia di Master Data: {', '.join(kelas_mapel.keys()) if kelas_mapel else 'Belum ada'}")
+            st.error(f"❌ Mata pelajaran untuk kelas **{kelas_santri}** belum diatur oleh Kepala Madrasah di Master Data!")
             return
 
         nilai_lama = db.get_nilai(santri_id, semester)
@@ -128,12 +107,10 @@ def render(db):
         
         with st.form("form_nilai"):
             st.subheader("📊 Nilai Akademik & Deskripsi Narasi Otomatis")
-            st.caption("Sistem akan otomatis menghitung Predikat (A-D) dan deskripsi capaian pembelajaran.")
             
             nilai_akademik_input = {}
             narasi_akademik = {}
             
-            # Form Nilai Angka per Mapel
             for mapel in mapel_list:
                 c_m1, c_m2 = st.columns([1, 2])
                 with c_m1:
@@ -168,9 +145,6 @@ def render(db):
             st.subheader("📜 Catatan Wali Kelas")
             catatan = st.text_area("Catatan Perkembangan Santri", value=catatan_lama)
 
-            # -------------------------------------------------------------
-            # CALCULATOR OTOMATIS KENAIKAN KELAS
-            # -------------------------------------------------------------
             jumlah = sum(nilai_akademik_input.values())
             rata_rata = jumlah / len(nilai_akademik_input) if nilai_akademik_input else 0
             mapel_dibawah_kkm = sum(1 for v in nilai_akademik_input.values() if v < 60)

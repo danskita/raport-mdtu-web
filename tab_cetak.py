@@ -11,17 +11,14 @@ def tampilkan_pdf(buffer):
 def render(db):
     st.header("🖨️ Pratinjau & Cetak Raport")
     
-    # ==========================================================
-    # ⛔ BLOKIR AKSES KEPALA MADRASAH
-    # ==========================================================
+    # ⛔ BLOKIR KEPALA MADRASAH
     if getattr(db, 'role', '') == 'kepala_madrasah':
         st.error("⛔ AKSES DITOLAK: Halaman ini khusus untuk Wali Kelas.")
-        st.info("💡 Sesuai SOP, tugas Kepala Madrasah adalah menandatangani raport (yang namanya otomatis tercetak). Pencetakan fisik raport dilakukan oleh Wali Kelas masing-masing.")
+        st.info("💡 Sesuai SOP, Kepala Madrasah tidak mencetak fisik raport. Pencetakan fisik dilakukan oleh Wali Kelas.")
         return
-    # ==========================================================
     
     if not db.data_master:
-        st.warning("Data santri masih kosong.")
+        st.warning("⚠️ Belum ada data santri di kelas ini. Silakan tambahkan santri terlebih dahulu di menu **Input Biodata**.")
         return
 
     daftar_nama = [s['nama'] for s in db.data_master]
@@ -36,7 +33,6 @@ def render(db):
     gen = PDFGenerator(db)
     santri = next((s for s in db.data_master if s['nama'] == pilih_nama), None)
 
-    # ... (TABS 1, 2, 3 SAMA SEPERTI KODE SEBELUMNYA) ...
     with sub_cover:
         if st.button("⚙️ Buat Preview Cover", key="btn_cover"):
             with st.spinner("Membuat Cover..."):
@@ -48,7 +44,7 @@ def render(db):
             tampilkan_pdf(st.session_state.pdf_cover)
 
     with sub_ganjil:
-        nilai_g = db.get_nilai(santri['id'], 1)
+        nilai_g = db.get_nilai(santri['id'], 1) if santri else None
         if st.button("⚙️ Buat Preview Ganjil", key="btn_ganjil"):
             if not nilai_g:
                 st.error(f"❌ {pilih_nama} belum memiliki data nilai untuk Semester Ganjil.")
@@ -63,7 +59,7 @@ def render(db):
             tampilkan_pdf(st.session_state.pdf_ganjil)
 
     with sub_genap:
-        nilai_e = db.get_nilai(santri['id'], 2)
+        nilai_e = db.get_nilai(santri['id'], 2) if santri else None
         if st.button("⚙️ Buat Preview Genap", key="btn_genap"):
             if not nilai_e:
                 st.error(f"❌ {pilih_nama} belum memiliki data nilai untuk Semester Genap.")
