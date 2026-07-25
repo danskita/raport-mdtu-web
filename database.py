@@ -74,6 +74,46 @@ class DataEngine:
         except Exception as e:
             return False, f"❌ Error Database: {e}"
 
+    def update_akun_guru(self, guru_id, nama_guru, username, password, role, kelas_binaan, nik, jk, tempat_lahir, tgl_lahir, no_hp, alamat):
+        """Memperbarui data atau mereset sandi guru yang sudah ada"""
+        if not self.lembaga_id: 
+            return False, "❌ Akses ditolak."
+        
+        data_update = {
+            "nama_guru": nama_guru,
+            "username": username.strip(),
+            "role": role,
+            "kelas_binaan": kelas_binaan if kelas_binaan and str(kelas_binaan).strip() != "" else None,
+            "nik": nik,
+            "jenis_kelamin": jk,
+            "tempat_lahir": tempat_lahir,
+            "tanggal_lahir": str(tgl_lahir),
+            "no_hp": no_hp,
+            "alamat": alamat
+        }
+        
+        # Enkripsi ulang password HANYA jika field password baru diisi
+        if password and password.strip() != "":
+            data_update["password"] = hashlib.sha256(password.encode()).hexdigest()
+            
+        try:
+            res = self.supabase.table("guru").update(data_update).eq("id", guru_id).eq("lembaga_id", self.lembaga_id).execute()
+            if res.data:
+                return True, f"✅ Data {nama_guru} berhasil diperbarui!"
+            return False, "❌ Gagal mengedit data."
+        except Exception as e:
+            return False, f"❌ Error: {e}"
+
+    def hapus_akun_guru(self, guru_id):
+        """Menghapus akun guru secara permanen"""
+        if not self.lembaga_id: 
+            return False, "❌ Akses ditolak."
+        try:
+            self.supabase.table("guru").delete().eq("id", guru_id).eq("lembaga_id", self.lembaga_id).execute()
+            return True, "🗑️ Akun guru berhasil dihapus permanen!"
+        except Exception as e:
+            return False, f"❌ Gagal menghapus data: {e}"
+
     def get_semua_guru_lembaga(self):
         """Mengambil daftar seluruh guru di lembaga yang sedang aktif"""
         if not self.lembaga_id: 
