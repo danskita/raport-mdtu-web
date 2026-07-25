@@ -43,6 +43,7 @@ class DataEngine:
 
     # --- FITUR MANAJEMEN AKUN GURU OLEH KEPALA MADRASAH ---
     def tambah_akun_guru(self, nama_guru, username, password, role, kelas_binaan, nik, jk, tempat_lahir, tgl_lahir, no_hp, alamat):
+        """Kepala Madrasah mendaftarkan guru/wali kelas"""
         if not self.lembaga_id: 
             return False, "❌ Akses ditolak: Identitas lembaga tidak ditemukan."
         
@@ -72,6 +73,7 @@ class DataEngine:
             return False, f"❌ Error Database: {e}"
 
     def update_akun_guru(self, guru_id, nama_guru, username, password, role, kelas_binaan, nik, jk, tempat_lahir, tgl_lahir, no_hp, alamat):
+        """Kepala Madrasah mereset atau mengedit data guru"""
         if not self.lembaga_id: 
             return False, "❌ Akses ditolak."
         
@@ -118,7 +120,7 @@ class DataEngine:
             print("Error get_semua_guru_lembaga:", e)
             return []
 
-    # --- LOGIN TERPUSAT ---
+    # --- LOGIN TERPUSAT (KEPALA MADRASAH & GURU) ---
     def login(self, identitas, password):
         identitas = str(identitas).strip()
         
@@ -194,7 +196,6 @@ class DataEngine:
         self.kelas_binaan = None
         self.list_akses_lembaga = []
 
-    # --- SMART FILTER SANTRI ---
     def muat_data_santri(self):
         if not self.lembaga_id: 
             return
@@ -202,9 +203,11 @@ class DataEngine:
             res = self.supabase.table("biodata_santri").select("*").eq("lembaga_id", self.lembaga_id).execute()
             semua_santri = res.data if res.data else []
             
+            # Jika Kepala Madrasah -> Tampilkan semua data
             if self.role not in ["wali_kelas", "guru"] or not self.kelas_binaan:
                 self.data_master = semua_santri
             else:
+                # Wali Kelas -> Filter pintar sesuai kelas binaan
                 kelas_binaan_bersih = str(self.kelas_binaan).upper().replace(" ", "")
                 santri_kelasku = []
                 for s in semua_santri:
@@ -216,18 +219,6 @@ class DataEngine:
         except Exception as e: 
             print(f"Error muat_data_santri: {e}")
 
-    def get_daftar_nama(self):
-        return [santri["nama"] for santri in self.data_master]
-
-    def simpan_lembaga(self, data):
-        if not self.lembaga_id: return False, "Akses ditolak"
-        try:
-            res = self.supabase.table("lembaga").update(data).eq("id", self.lembaga_id).execute()
-            if res.data:
-                self.data_lembaga = res.data[0]
-                return True, "Data Identitas Lembaga berhasil diperbarui!"
-        except Exception as e: return False, f"Gagal: {e}"
-
     def simpan_pengaturan(self, data_pengaturan):
         if not self.lembaga_id: return False, "Akses ditolak."
         try:
@@ -237,44 +228,6 @@ class DataEngine:
                 return True, "Master Data berhasil disimpan!"
         except Exception as e: return False, f"Gagal: {e}"
 
-    # --- FITUR MANAJEMEN SANTRI LENGKAP ---
-    def simpan_biodata(self, no_induk, nama, data_lengkap, santri_id=None):
-        if not self.lembaga_id: return False, "Akses ditolak"
-        try:
-            if santri_id:
-                self.supabase.table("biodata_santri").update({
-                    "no_induk": no_induk, "nama": nama, "data_lengkap": data_lengkap
-                }).eq("id", santri_id).eq("lembaga_id", self.lembaga_id).execute()
-                pesan = "Data santri berhasil diperbarui!"
-            else:
-                self.supabase.table("biodata_santri").insert({
-                    "lembaga_id": self.lembaga_id, "no_induk": no_induk, "nama": nama, "data_lengkap": data_lengkap
-                }).execute()
-                pesan = "Biodata santri berhasil ditambahkan!"
-            
-            self.muat_data_santri()
-            return True, pesan
-        except Exception as e: return False, f"Gagal: {e}"
-
-    def simpan_bulk_biodata(self, list_data):
-        if not self.lembaga_id: return False, "Akses ditolak"
-        try:
-            for data in list_data: data["lembaga_id"] = self.lembaga_id
-            self.supabase.table("biodata_santri").insert(list_data).execute()
-            self.muat_data_santri()
-            return True, f"{len(list_data)} data santri berhasil diimpor!"
-        except Exception as e: return False, f"Gagal mengimpor data: {e}"
-
-    def hapus_biodata(self, santri_id):
-        if not self.lembaga_id: return False, "Akses ditolak"
-        try:
-            self.supabase.table("nilai_santri").delete().eq("santri_id", santri_id).execute()
-            self.supabase.table("biodata_santri").delete().eq("id", santri_id).eq("lembaga_id", self.lembaga_id).execute()
-            self.muat_data_santri()
-            return True, "Data santri beserta nilainya berhasil dihapus secara permanen!"
-        except Exception as e: return False, f"Gagal menghapus: {e}"
-
-    # --- FITUR PENILAIAN & RANKING ---
     def simpan_nilai(self, data_nilai, id_nilai=None):
         if not self.lembaga_id: return False, "Akses ditolak"
         data_nilai["lembaga_id"] = self.lembaga_id 
@@ -292,60 +245,3 @@ class DataEngine:
             res = self.supabase.table("nilai_santri").select("*").eq("santri_id", santri_id).eq("semester", semester).eq("lembaga_id", self.lembaga_id).execute()
             return res.data[0] if res.data else None
         except: return None
-
-    def get_semua_nilai(self, semester):
-        if not self.lembaga_id: return []
-        try:
-            res = self.supabase.table("nilai_santri").select("*").eq("semester", semester).eq("lembaga_id", self.lembaga_id).execute()
-            return res.data if res.data else []
-        except: return []
-
-    def get_ranking(self, santri_id, semester):
-        if not self.lembaga_id: return "-", 0
-        try:
-            query = self.supabase.table("nilai_santri").select("santri_id, jumlah").eq("semester", semester).eq("lembaga_id", self.lembaga_id)
-            res = query.execute()
-            if not res.data: return "-", 0
-            
-            if self.role == "wali_kelas" and self.kelas_binaan:
-                santri_kelas_ini = [s['id'] for s in self.data_master]
-                data_valid = [x for x in res.data if x['santri_id'] in santri_kelas_ini]
-            else:
-                data_valid = res.data
-                
-            data_urut = sorted(data_valid, key=lambda x: x['jumlah'], reverse=True)
-            rank = 1
-            for item in data_urut:
-                if item['santri_id'] == santri_id: return rank, len(data_urut)
-                rank += 1
-            return "-", len(data_urut)
-        except: return "-", 0
-
-    # --- FITUR ABSENSI ---
-    def get_absensi_harian(self, tanggal):
-        if not self.lembaga_id: return {}
-        try:
-            res = self.supabase.table("absensi_harian").select("*").eq("lembaga_id", self.lembaga_id).eq("tanggal", str(tanggal)).execute()
-            if res.data: return {item['santri_id']: item['status'] for item in res.data}
-            return {}
-        except: return {}
-
-    def simpan_absensi_harian(self, tanggal, dict_absen):
-        if not self.lembaga_id: return False, "Akses ditolak"
-        try:
-            list_santri_id = list(dict_absen.keys())
-            if not list_santri_id: return True, "Tidak ada data disimpan"
-
-            self.supabase.table("absensi_harian").delete().eq("lembaga_id", self.lembaga_id).eq("tanggal", str(tanggal)).in_("santri_id", list_santri_id).execute()
-
-            data_insert = []
-            for santri_id, status in dict_absen.items():
-                data_insert.append({
-                    "lembaga_id": self.lembaga_id, "santri_id": santri_id, "tanggal": str(tanggal), "status": status
-                })
-            
-            if data_insert:
-                self.supabase.table("absensi_harian").insert(data_insert).execute()
-                
-            return True, "Absensi harian berhasil disimpan!"
-        except Exception as e: return False, f"Gagal menyimpan absen: {e}"

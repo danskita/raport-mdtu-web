@@ -19,11 +19,11 @@ def render(db):
     pengaturan_lama = db.data_lembaga.get("pengaturan_master") or {}
     kelas_mapel = pengaturan_lama.get("kelas_mapel", {})
     
-    # PERUBAHAN: Draf Standar Nasional Kurikulum TKA A, TKA B, TPA A, TPA B, MDTU 1-4
-    teks_default_nasional = """TKA A : Iqro, Hafalan Doa Sehari-hari, Hafalan Surat Pendek, Praktek Sholat, Motorik & Mewarnai
-TKA B : Al-Qur'an Dasar, Aqidah Akhlak, Hafalan Surat Pendek, Praktek Sholat, Huruf Hijaiyah
-TPA A : Al-Qur'an, Ilmu Tajwid Dasar, Aqidah Akhlak, Fiqih Ibadah, Dinul Islam
-TPA B : Al-Qur'an, Hafalan Surat Pilihan, Sejarah Kebudayaan Islam, Bahasa Arab Dasar, Fiqih
+    # PERUBAHAN: Draf Standar Nasional Kurikulum TKA A/B, TPA A/B (Revisi Terbaru), MDTU 1-4
+    teks_default_nasional = """TKA A : Qira'ati / Iqro / Tilawati, Tahfidz, Doa dan Dzikir Harian, Dinul Islam / Aqidah Akhlak, Fiqih Ibadah, Khat / Imla, Tarikh / Sejarah Islam
+TKA B : Qira'ati / Iqro / Tilawati, Tahfidz, Doa dan Dzikir Harian, Dinul Islam / Aqidah Akhlak, Fiqih Ibadah, Khat / Imla, Tarikh / Sejarah Islam
+TPA A : Qira'ati / Iqro / Tilawati, Tahfidz, Doa dan Dzikir Harian, Dinul Islam / Aqidah Akhlak, Fiqih Ibadah, Khat / Imla, Tarikh / Sejarah Islam
+TPA B : Qira'ati / Iqro / Tilawati, Tahfidz, Doa dan Dzikir Harian, Dinul Islam / Aqidah Akhlak, Fiqih Ibadah, Khat / Imla, Tarikh / Sejarah Islam
 MDTU 1 : Al-Qur'an Hadits, Aqidah Akhlak, Fiqih, Sejarah Kebudayaan Islam, Bahasa Arab
 MDTU 2 : Al-Qur'an Hadits, Aqidah Akhlak, Fiqih, Sejarah Kebudayaan Islam, Bahasa Arab
 MDTU 3 : Al-Qur'an Hadits, Aqidah Akhlak, Fiqih, Sejarah Kebudayaan Islam, Bahasa Arab, Tajwid
