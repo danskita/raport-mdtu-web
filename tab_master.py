@@ -9,19 +9,69 @@ def render(db):
         st.warning("⚠️ Anda belum memilih madrasah yang aktif. Silakan kembali ke Profil.")
         return
 
+    # ==========================================
+    # BAGIAN 1: PENGATURAN KELAS & MATA PELAJARAN
+    # ==========================================
+    st.markdown("---")
+    st.subheader("📚 Pengaturan Kelas & Mata Pelajaran")
+    
+    # Mengambil data pengaturan yang sudah ada di database
+    pengaturan_lama = db.data_lembaga.get("pengaturan_master") or {}
+    kelas_mapel = pengaturan_lama.get("kelas_mapel", {})
+    
+    teks_awal = ""
+    for kls, mapel_list in kelas_mapel.items():
+        teks_awal += f"{kls} : {', '.join(mapel_list)}\n"
+        
+    if getattr(db, 'role', '') == 'admin':
+        if not teks_awal:
+            teks_awal = "1A : Al-Qur'an, Hadits, Fiqih, Aqidah\n2A : Al-Qur'an, Hadits, Fiqih, Sejarah Islam"
+            
+        with st.expander("⚙️ Edit Daftar Kelas & Mata Pelajaran", expanded=True if not kelas_mapel else False):
+            with st.form("form_mapel"):
+                st.info("💡 **Petunjuk Pengisian:** Ketik nama kelas, beri tanda titik dua (:), lalu pisahkan mata pelajaran dengan koma (,).")
+                teks_input = st.text_area(
+                    "Daftar Kelas & Mata Pelajaran",
+                    value=teks_awal,
+                    height=150
+                )
+                if st.form_submit_button("💾 Simpan Mata Pelajaran"):
+                    data_baru = {}
+                    for line in teks_input.strip().split('\n'):
+                        if ":" in line:
+                            parts = line.split(":")
+                            nama_kelas = parts[0].strip()
+                            mapel = [m.strip() for m in parts[1].split(",") if m.strip()]
+                            data_baru[nama_kelas] = mapel
+                    
+                    pengaturan_lama["kelas_mapel"] = data_baru
+                    sukses, pesan = db.simpan_pengaturan(pengaturan_lama)
+                    if sukses:
+                        st.success("✅ Pengaturan mata pelajaran berhasil disimpan!")
+                        st.rerun()
+                    else:
+                        st.error(pesan)
+    else:
+        # Tampilan jika yang login adalah Guru/Wali Kelas
+        if not kelas_mapel:
+            st.warning("Belum ada mata pelajaran yang diatur oleh Admin Lembaga.")
+        else:
+            st.info("Berikut adalah daftar mata pelajaran yang ditetapkan oleh madrasah:")
+            for kls, mapel_list in kelas_mapel.items():
+                st.write(f"**Kelas {kls}**: {', '.join(mapel_list)}")
+
+    # ==========================================
+    # BAGIAN 2: MANAJEMEN AKUN & BIODATA GURU
+    # ==========================================
     st.markdown("---")
     st.subheader("👥 Manajemen Akun & Biodata Guru")
     
-    # Menarik data guru dari database
     daftar_guru = db.get_semua_guru_lembaga()
 
     if getattr(db, 'role', '') == 'admin':
-        # INI DIA MENU BARUNYA: 3 Tab Navigasi
         t_tambah, t_edit, t_daftar = st.tabs(["➕ Tambah Guru", "✏️ Edit & Hapus", "📋 Daftar Guru"])
         
-        # ==========================================
-        # TAB 1: TAMBAH GURU BARU
-        # ==========================================
+        # --- TAB 1: TAMBAH GURU ---
         with t_tambah:
             st.info("Akun yang dibuat akan langsung terhubung dengan madrasah ini.")
             with st.form("form_tambah_guru"):
@@ -65,14 +115,11 @@ def render(db):
                         else:
                             st.error(pesan)
                             
-        # ==========================================
-        # TAB 2: EDIT & HAPUS GURU
-        # ==========================================
+        # --- TAB 2: EDIT & HAPUS GURU ---
         with t_edit:
             if not daftar_guru:
                 st.warning("Belum ada data guru. Silakan tambahkan terlebih dahulu.")
             else:
-                # Opsi pilihan guru untuk diedit/dihapus
                 dict_guru = {f"{g['nama_guru']} (NIP: {g['username']})": g for g in daftar_guru}
                 pilih_guru = st.selectbox("🔍 Pilih Guru yang ingin diubah/dihapus:", list(dict_guru.keys()))
                 
@@ -131,7 +178,7 @@ def render(db):
                                 else:
                                     st.error(pesan)
                                     
-                    # TOMBOL HAPUS AKUN
+                    # --- TOMBOL HAPUS AKUN ---
                     st.markdown("---")
                     st.markdown("#### 🗑️ Hapus Akun Secara Permanen")
                     st.error("⚠️ Menghapus akun akan menghilangkan akses login guru tersebut secara permanen.")
@@ -148,9 +195,7 @@ def render(db):
                         else:
                             st.warning("Silakan centang kotak konfirmasi terlebih dahulu!")
                             
-        # ==========================================
-        # TAB 3: DAFTAR GURU
-        # ==========================================
+        # --- TAB 3: DAFTAR GURU ---
         with t_daftar:
             if daftar_guru:
                 df_guru = pd.DataFrame(daftar_guru)
