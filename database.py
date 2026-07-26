@@ -41,29 +41,38 @@ class DataEngine:
         except Exception as e:
             return False, f"Pendaftaran error: {e}"
 
-    # --- FITUR MANAJEMEN AKUN GURU OLEH KEPALA MADRASAH ---
+    # ==========================================================
+    # MANAJEMEN AKUN GURU (DENGAN ANTI DUPLIKAT NIP/USERNAME)
+    # ==========================================================
     def tambah_akun_guru(self, nama_guru, username, password, role, kelas_binaan, nik, jk, tempat_lahir, tgl_lahir, no_hp, alamat):
         if not self.lembaga_id: 
             return False, "❌ Akses ditolak: Identitas lembaga tidak ditemukan."
         
-        hashed_password = hashlib.sha256(password.encode()).hexdigest()
-        
-        data_baru = {
-            "lembaga_id": self.lembaga_id,
-            "nama_guru": nama_guru,
-            "username": username.strip(),
-            "password": hashed_password, 
-            "role": role,
-            "kelas_binaan": kelas_binaan if kelas_binaan and str(kelas_binaan).strip() != "" else None,
-            "nik": nik,
-            "jenis_kelamin": jk,
-            "tempat_lahir": tempat_lahir,
-            "tanggal_lahir": str(tgl_lahir),
-            "no_hp": no_hp,
-            "alamat": alamat
-        }
+        username_bersih = username.strip()
         
         try:
+            # CEK DATA GANDA: Apakah NIP/Username sudah dipakai?
+            cek_user = self.supabase.table("guru").select("nama_guru").eq("username", username_bersih).execute()
+            if cek_user.data:
+                return False, f"⚠️ Gagal! NIP/Username '{username_bersih}' sudah terdaftar atas nama {cek_user.data[0]['nama_guru']}. Gunakan NIP lain!"
+
+            hashed_password = hashlib.sha256(password.encode()).hexdigest()
+            
+            data_baru = {
+                "lembaga_id": self.lembaga_id,
+                "nama_guru": nama_guru,
+                "username": username_bersih,
+                "password": hashed_password, 
+                "role": role,
+                "kelas_binaan": kelas_binaan if kelas_binaan and str(kelas_binaan).strip() != "" else None,
+                "nik": nik,
+                "jenis_kelamin": jk,
+                "tempat_lahir": tempat_lahir,
+                "tanggal_lahir": str(tgl_lahir),
+                "no_hp": no_hp,
+                "alamat": alamat
+            }
+            
             res = self.supabase.table("guru").insert(data_baru).execute()
             if res.data:
                 return True, f"✅ Berhasil! Akun dan Biodata untuk {nama_guru} telah ditambahkan."
@@ -75,23 +84,32 @@ class DataEngine:
         if not self.lembaga_id: 
             return False, "❌ Akses ditolak."
         
-        data_update = {
-            "nama_guru": nama_guru,
-            "username": username.strip(),
-            "role": role,
-            "kelas_binaan": kelas_binaan if kelas_binaan and str(kelas_binaan).strip() != "" else None,
-            "nik": nik,
-            "jenis_kelamin": jk,
-            "tempat_lahir": tempat_lahir,
-            "tanggal_lahir": str(tgl_lahir),
-            "no_hp": no_hp,
-            "alamat": alamat
-        }
+        username_bersih = username.strip()
         
-        if password and password.strip() != "":
-            data_update["password"] = hashlib.sha256(password.encode()).hexdigest()
-            
         try:
+            # CEK DATA GANDA (Boleh pakai username sendiri, tidak boleh pakai milik orang lain)
+            cek_user = self.supabase.table("guru").select("id, nama_guru").eq("username", username_bersih).execute()
+            if cek_user.data:
+                pemilik_lama = cek_user.data[0]
+                if pemilik_lama['id'] != guru_id:
+                    return False, f"⚠️ Gagal! NIP/Username '{username_bersih}' sudah dipakai oleh {pemilik_lama['nama_guru']}!"
+
+            data_update = {
+                "nama_guru": nama_guru,
+                "username": username_bersih,
+                "role": role,
+                "kelas_binaan": kelas_binaan if kelas_binaan and str(kelas_binaan).strip() != "" else None,
+                "nik": nik,
+                "jenis_kelamin": jk,
+                "tempat_lahir": tempat_lahir,
+                "tanggal_lahir": str(tgl_lahir),
+                "no_hp": no_hp,
+                "alamat": alamat
+            }
+            
+            if password and password.strip() != "":
+                data_update["password"] = hashlib.sha256(password.encode()).hexdigest()
+                
             res = self.supabase.table("guru").update(data_update).eq("id", guru_id).eq("lembaga_id", self.lembaga_id).execute()
             if res.data:
                 return True, f"✅ Data {nama_guru} berhasil diperbarui!"
@@ -237,24 +255,37 @@ class DataEngine:
                 return True, "Master Data berhasil disimpan!"
         except Exception as e: return False, f"Gagal: {e}"
 
-    # --- FITUR MANAJEMEN SANTRI LENGKAP ---
+    # ==========================================================
+    # MANAJEMEN SANTRI (DENGAN ANTI DUPLIKAT NIS/NO INDUK)
+    # ==========================================================
     def simpan_biodata(self, no_induk, nama, data_lengkap, santri_id=None):
         if not self.lembaga_id: return False, "Akses ditolak"
+        
+        no_induk_bersih = str(no_induk).strip()
+        
         try:
+            # CEK DATA GANDA: Pastikan Nomor Induk belum dipakai orang lain di Madrasah ini
+            cek_induk = self.supabase.table("biodata_santri").select("id, nama").eq("lembaga_id", self.lembaga_id).eq("no_induk", no_induk_bersih).execute()
+            if cek_induk.data:
+                pemilik_lama = cek_induk.data[0]
+                if not santri_id or (santri_id and pemilik_lama['id'] != santri_id):
+                    return False, f"⚠️ Gagal! No. Induk/NIS '{no_induk_bersih}' sudah digunakan oleh santri bernama {pemilik_lama['nama']}! Tidak boleh ada data ganda."
+
             if santri_id:
                 self.supabase.table("biodata_santri").update({
-                    "no_induk": no_induk, "nama": nama, "data_lengkap": data_lengkap
+                    "no_induk": no_induk_bersih, "nama": nama, "data_lengkap": data_lengkap
                 }).eq("id", santri_id).eq("lembaga_id", self.lembaga_id).execute()
                 pesan = "Data santri berhasil diperbarui!"
             else:
                 self.supabase.table("biodata_santri").insert({
-                    "lembaga_id": self.lembaga_id, "no_induk": no_induk, "nama": nama, "data_lengkap": data_lengkap
+                    "lembaga_id": self.lembaga_id, "no_induk": no_induk_bersih, "nama": nama, "data_lengkap": data_lengkap
                 }).execute()
                 pesan = "Biodata santri berhasil ditambahkan!"
             
             self.muat_data_santri()
             return True, pesan
-        except Exception as e: return False, f"Gagal: {e}"
+        except Exception as e: 
+            return False, f"Gagal: {e}"
 
     def simpan_bulk_biodata(self, list_data):
         if not self.lembaga_id: return False, "Akses ditolak"
@@ -268,11 +299,17 @@ class DataEngine:
     def hapus_biodata(self, santri_id):
         if not self.lembaga_id: return False, "Akses ditolak"
         try:
+            # Hapus nilai dan absen dulu agar tidak ada data yatim piatu (cascade effect manual)
             self.supabase.table("nilai_santri").delete().eq("santri_id", santri_id).execute()
+            self.supabase.table("absensi_harian").delete().eq("santri_id", santri_id).execute()
+            
+            # Baru hapus biodata utamanya
             self.supabase.table("biodata_santri").delete().eq("id", santri_id).eq("lembaga_id", self.lembaga_id).execute()
+            
             self.muat_data_santri()
-            return True, "Data santri beserta nilainya berhasil dihapus secara permanen!"
-        except Exception as e: return False, f"Gagal menghapus: {e}"
+            return True, "Data santri beserta nilai dan absensinya berhasil dihapus secara permanen!"
+        except Exception as e: 
+            return False, f"Gagal menghapus: {e}"
 
     # --- FITUR PENILAIAN & RANKING ---
     def simpan_nilai(self, data_nilai, id_nilai=None):
