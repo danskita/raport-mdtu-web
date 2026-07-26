@@ -24,14 +24,14 @@ def render(db):
     pengaturan_lama = db.data_lembaga.get("pengaturan_master") or {}
     kelas_mapel = pengaturan_lama.get("kelas_mapel", {})
     
-    teks_default_nasional = """TKA A : Qira'ati / Iqro / Tilawati, Tahfidz, Doa dan Dzikir Harian, Dinul Islam / Aqidah Akhlak, Fiqih Ibadah, Khat / Imla, Tarikh / Sejarah Islam
-TKA B : Qira'ati / Iqro / Tilawati, Tahfidz, Doa dan Dzikir Harian, Dinul Islam / Aqidah Akhlak, Fiqih Ibadah, Khat / Imla, Tarikh / Sejarah Islam
-TPA A : Qira'ati / Iqro / Tilawati, Tahfidz, Doa dan Dzikir Harian, Dinul Islam / Aqidah Akhlak, Fiqih Ibadah, Khat / Imla, Tarikh / Sejarah Islam
-TPA B : Qira'ati / Iqro / Tilawati, Tahfidz, Doa dan Dzikir Harian, Dinul Islam / Aqidah Akhlak, Fiqih Ibadah, Khat / Imla, Tarikh / Sejarah Islam
-MDTU 1 : Al-Qur'an Hadits, Aqidah Akhlak, Fiqih, Sejarah Kebudayaan Islam, Bahasa Arab
-MDTU 2 : Al-Qur'an Hadits, Aqidah Akhlak, Fiqih, Sejarah Kebudayaan Islam, Bahasa Arab
-MDTU 3 : Al-Qur'an Hadits, Aqidah Akhlak, Fiqih, Sejarah Kebudayaan Islam, Bahasa Arab, Tajwid
-MDTU 4 : Al-Qur'an Hadits, Aqidah Akhlak, Fiqih, Sejarah Kebudayaan Islam, Bahasa Arab, Praktik Ibadah"""
+    teks_default_nasional = """TKA A : Iqro, Tahfidz, Doa dan Dzikir Harian, Dinul Islam / Aqidah Akhlak, Fiqih Ibadah, Khat / Imla, Tarikh / Sejarah Islam, Mulok
+TKA B :  Iqro, Tahfidz, Doa dan Dzikir Harian, Dinul Islam / Aqidah Akhlak, Fiqih Ibadah, Khat / Imla, Tarikh / Sejarah Islam, Mulok
+TPA A :  Iqro, Tahfidz, Doa dan Dzikir Harian, Dinul Islam / Aqidah Akhlak, Fiqih Ibadah, Khat / Imla, Tarikh / Sejarah Islam, Mulok
+TPA B :  Iqro, Tahfidz, Doa dan Dzikir Harian, Dinul Islam / Aqidah Akhlak, Fiqih Ibadah, Khat / Imla, Tarikh / Sejarah Islam, Mulok
+MDTU 1 : Al-Qur'an, Hadits, Aqidah Akhlak, Fiqih, Sejarah Kebudayaan Islam, Bahasa Arab, Praktek Ibadah, Mulok
+MDTU 2 : Al-Qur'an, Hadits, Aqidah Akhlak, Fiqih, Sejarah Kebudayaan Islam, Bahasa Arab, Praktek Ibadah, Mulok
+MDTU 3 : Al-Qur'an, Hadits, Aqidah Akhlak, Fiqih, Sejarah Kebudayaan Islam, Bahasa Arab, Praktek Ibadah, Mulok
+MDTU 4 : Al-Qur'an Hadits, Aqidah Akhlak, Fiqih, Sejarah Kebudayaan Islam, Bahasa Arab, Praktik Ibadah, Mulok"""
 
     teks_awal = ""
     for kls, mapel_list in kelas_mapel.items():
