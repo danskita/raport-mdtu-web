@@ -278,3 +278,133 @@ class PDFGenerator:
         c.save()
         buffer.seek(0)
         return buffer
+    def cetak_rekap_santri(self, kelas_terpilih):
+        """Membuat PDF Rekapitulasi Biodata Santri Per Kelas (F4 Landscape/Portrait)"""
+        dl = self._get_dl_flat()
+        buffer = io.BytesIO()
+        c = canvas.Canvas(buffer, pagesize=F4)
+        lebar, tinggi = F4
+        
+        # Header Kop Surat
+        c.setFont("Helvetica-Bold", 14)
+        c.drawCentredString(lebar/2, tinggi - 1.5*cm, f"REKAPITULASI DATA INDUK SANTRI")
+        c.setFont("Helvetica-Bold", 12)
+        c.drawCentredString(lebar/2, tinggi - 2.1*cm, f"MADRASAH: {dl.get('nama_madrasah', '-').upper()}")
+        c.setFont("Helvetica", 10)
+        c.drawCentredString(lebar/2, tinggi - 2.6*cm, f"Kelas: {kelas_terpilih}")
+        
+        # Ambil data santri khusus kelas ini
+        santri_kelas = []
+        for s in self.db.data_master:
+            dl_santri = s.get("data_lengkap", {})
+            kls = dl_santri.get("kelas_santri", dl_santri.get("kelas", ""))
+            if str(kls).upper().replace(" ","") == str(kelas_terpilih).upper().replace(" ",""):
+                santri_kelas.append(s)
+
+        data_tabel = [['No.', 'No. Induk / NIS', 'Nama Lengkap Santri', 'L/P', 'Tempat, Tgl Lahir', 'Nama Ayah']]
+        styles = [
+            ('GRID', (0,0), (-1,-1), 1, colors.black),
+            ('ALIGN', (0,0), (-1,-1), 'CENTER'),
+            ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+            ('ALIGN', (2,0), (2,-1), 'LEFT'),
+            ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
+            ('BACKGROUND', (0,0), (-1,0), colors.lightgrey),
+            ('FONTSIZE', (0,0), (-1,-1), 9),
+        ]
+
+        style_teks = ParagraphStyle(name='RSText', fontName='Helvetica', fontSize=9, leading=11)
+
+        for i, s in enumerate(santri_kelas):
+            dl_s = s.get("data_lengkap", {})
+            tgl_lhr = f"{dl_s.get('tempat_lahir', '-')}, {dl_s.get('tanggal_lahir', '-')}"
+            
+            data_tabel.append([
+                str(i+1),
+                Paragraph(str(s.get('no_induk', '-')), style_teks),
+                Paragraph(str(s.get('nama', '-')), style_teks),
+                Paragraph(str(dl_s.get('jenis_kelamin', '-'))[:1], style_teks),
+                Paragraph(tgl_lhr, style_teks),
+                Paragraph(str(dl_s.get('nama_ayah', '-')), style_teks)
+            ])
+
+        tabel = Table(data_tabel, colWidths=[1*cm, 3*cm, 5.5*cm, 1*cm, 4.5*cm, 3.5*cm])
+        tabel.setStyle(TableStyle(styles))
+        w, h = tabel.wrap(lebar, tinggi)
+        tabel.drawOn(c, 1.5*cm, tinggi - 3.5*cm - h)
+
+        c.showPage()
+        c.save()
+        buffer.seek(0)
+        return buffer
+
+    def cetak_rekap_nilai(self, kelas_terpilih, semester):
+        """Membuat PDF Rekapitulasi Nilai Akademik Seluruh Santri Per Kelas (F4)"""
+        dl = self._get_dl_flat()
+        pengaturan = dl.get("pengaturan_master", {})
+        
+        # Ambil daftar mapel kelas ini
+        mapel_list = []
+        for kls, mapels in pengaturan.get("kelas_mapel", {}).items():
+            if str(kls).upper().replace(" ","") == str(kelas_terpilih).upper().replace(" ",""):
+                mapel_list = mapels
+                break
+                
+        if not mapel_list: mapel_list = ["Al-Qur'an", "Aqidah", "Fiqih"]
+
+        buffer = io.BytesIO()
+        # Untuk rekap nilai yang kolomnya banyak, kita gunakan orientasi Landscape F4 (Lebar dan Tinggi dibalik)
+        F4_Landscape = (33.0 * cm, 21.5 * cm)
+        c = canvas.Canvas(buffer, pagesize=F4_Landscape)
+        lebar, tinggi = F4_Landscape
+
+        c.setFont("Helvetica-Bold", 14)
+        c.drawCentredString(lebar/2, tinggi - 1.5*cm, f"REKAPITULASI NILAI AKADEMIK SANTRI")
+        c.setFont("Helvetica-Bold", 11)
+        c.drawCentredString(lebar/2, tinggi - 2.1*cm, f"MADRASAH: {dl.get('nama_madrasah', '-').upper()} | KELAS: {kelas_terpilih} | SEMESTER: {semester}")
+
+        # Header Tabel Dinamis
+        header_row = ['No.', 'Nama Santri'] + mapel_list + ['Jumlah', 'Rata-rata', 'Status']
+        data_tabel = [header_row]
+        
+        styles = [
+            ('GRID', (0,0), (-1,-1), 1, colors.black),
+            ('ALIGN', (0,0), (-1,-1), 'CENTER'),
+            ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+            ('ALIGN', (1,0), (1,-1), 'LEFT'),
+            ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
+            ('BACKGROUND', (0,0), (-1,0), colors.lightgrey),
+            ('FONTSIZE', (0,0), (-1,-1), 8),
+        ]
+
+        style_teks = ParagraphStyle(name='RKText', fontName='Helvetica', fontSize=8, leading=10)
+
+        santri_kelas = [s for s in self.db.data_master if str(s.get("data_lengkap", {}).get("kelas_santri", "")).upper().replace(" ","") == str(kelas_terpilih).upper().replace(" ","")]
+
+        for i, s in enumerate(santri_kelas):
+            nilai_s = self.db.get_nilai(s['id'], semester)
+            komp = nilai_s.get('komponen_nilai', {}) if nilai_s else {}
+            n_akademik = komp.get('akademik', {})
+            
+            baris = [str(i+1), Paragraph(s['nama'], style_teks)]
+            for m in mapel_list:
+                baris.append(str(int(n_akademik.get(m, 0))))
+                
+            baris.append(f"{nilai_s.get('jumlah', 0):.0f}" if nilai_s else "0")
+            baris.append(f"{nilai_s.get('rata_rata', 0):.1f}" if nilai_s else "0")
+            baris.append(str(komp.get('status', '-')))
+            
+            data_tabel.append(baris)
+
+        # Hitung lebar kolom otomatis agar pas di layar Landscape F4 (~30 cm efektif)
+        lebar_mapel = min(2.5*cm, 12*cm / max(len(mapel_list), 1))
+        col_widths = [1*cm, 5.5*cm] + [lebar_mapel]*len(mapel_list) + [1.8*cm, 1.8*cm, 3.5*cm]
+
+        tabel = Table(data_tabel, colWidths=col_widths)
+        tabel.setStyle(TableStyle(styles))
+        w, h = tabel.wrap(lebar, tinggi)
+        tabel.drawOn(c, 1.5*cm, tinggi - 3.2*cm - h)
+
+        c.showPage()
+        c.save()
+        buffer.seek(0)
+        return buffer
