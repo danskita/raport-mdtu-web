@@ -9,22 +9,70 @@ import tab_absen
 import tab_nilai
 import tab_data
 import tab_cetak
+import tab_hafalan
 
 # Konfigurasi Halaman Web
 st.set_page_config(page_title="e-Raport Madrasah", page_icon="📚", layout="wide")
 
+# ==========================================
+# DEFINISI FUNGSI BANNER
+# ==========================================
+def tampilkan_banner():
+    st.markdown("""
+    <div style="
+        background: linear-gradient(135deg, #023047, #0d98ba, #219ebc);
+        padding: 35px 20px;
+        border-radius: 15px;
+        box-shadow: 0 6px 15px rgba(0,0,0,0.15);
+        text-align: center;
+        margin-bottom: 25px;
+        border: 2px solid #8ecae6;
+    ">
+        <h1 style="
+            color: #ffffff; 
+            margin-bottom: 5px; 
+            font-size: 2.8rem; 
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        ">
+            🕌 Portal e-Raport Diniyah & TKA/TPA
+        </h1>
+        <h3 style="
+            color: #ffb703; 
+            margin-top: 0px; 
+            font-weight: 500;
+            font-size: 1.3rem;
+            letter-spacing: 1px;
+        ">
+            Sistem Evaluasi Akademik & Pantauan Hafalan Santri
+        </h3>
+        <p style="
+            color: #e0e0e0; 
+            font-size: 15px; 
+            margin-top: 15px; 
+            margin-bottom: 0px;
+        ">
+            Lembaga Pembinaan dan Pengembangan TK Al-Qur'an (LPPTKA) BKPRMI<br>
+            <i>Efisien, Cepat, dan Tepat Berstandar Nasional</i>
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+
+# ==========================================
+# FUNGSI UTAMA (MAIN APP)
+# ==========================================
 def main():
+    tampilkan_banner()
+    
     if 'db' not in st.session_state:
         st.session_state.db = DataEngine()
     
     db = st.session_state.db
 
-    # ==========================================
+    # ------------------------------------------------
     # HALAMAN LOGIN & PENDAFTARAN LEMBAGA
-    # ==========================================
+    # ------------------------------------------------
     if not db.lembaga_id:
-        st.title("📚 Portal e-Raport Madrasah")
-        
         tab_login, tab_daftar = st.tabs(["🔑 Login Akun", "📝 Daftar Lembaga Baru"])
         
         # --- TAB 1: LOGIN ---
@@ -68,32 +116,39 @@ def main():
                             st.error(pesan)
         return
 
-    # ==========================================
+    # ------------------------------------------------
     # JIKA SUDAH LOGIN (MENU UTAMA)
-    # ==========================================
+    # ------------------------------------------------
     nama_lembaga = db.data_lembaga.get('nama_madrasah', 'Madrasah')
     nama_pengguna = db.data_lembaga.get('_nama_guru') or db.data_lembaga.get('email', 'Admin')
     
     st.sidebar.title(f"🏫 {nama_lembaga}")
     st.sidebar.write(f"👤 **{nama_pengguna}**")
     
+    # --- ROUTING CERDAS (SMART ROUTING) ---
     if db.role == 'kepala_madrasah':
         st.sidebar.caption("👔 Role: Kepala Madrasah")
         menu_options = ["Pemantauan & Rekap", "Master Data", "Profil Guru"]
     else:
         kelas = db.kelas_binaan if db.kelas_binaan else "Belum Atur Kelas"
         st.sidebar.caption(f"👨‍🏫 Role: Wali Kelas ({kelas})")
-        menu_options = ["Profil Guru", "Input Biodata", "Input Absensi", "Input Nilai", "Cetak Raport", "Pemantauan & Rekap"]
         
+        # KELAS TKA / TPA MEMILIKI DUA MENU PENILAIAN: INPUT HAFALAN & INPUT NILAI AKADEMIK
+        if "TKA" in str(kelas).upper() or "TPA" in str(kelas).upper():
+            menu_options = ["Profil Guru", "Input Biodata", "Input Absensi", "Input Hafalan", "Input Nilai Akademik", "Pemantauan & Rekap", "Cetak Raport"]
+        else:
+            menu_options = ["Profil Guru", "Input Biodata", "Input Absensi", "Input Nilai Akademik", "Pemantauan & Rekap", "Cetak Raport"]
+            
     st.sidebar.markdown("---")
     pilihan = st.sidebar.radio("Navigasi Menu", menu_options)
     
     st.sidebar.markdown("---")
-    if st.sidebar.button("🚪 Logout / Keluar", use_container_width=True):
+    
+    if st.sidebar.button("🚪 Logout / Keluar", use_container_width=True, key="btn_logout_utama"):
         db.logout()
         st.rerun()
 
-    # Routing Menu
+    # --- EKSEKUSI HALAMAN TAB ---
     if pilihan == "Master Data":
         tab_master.render(db)
     elif pilihan == "Profil Guru":
@@ -101,12 +156,12 @@ def main():
     elif pilihan == "Pemantauan & Rekap":
         tab_data.render(db)
     elif pilihan == "Input Biodata":
-        try: tab_biodata.render(db)
-        except Exception as e: st.error(f"Error: {e}")
+        tab_biodata.render(db)
     elif pilihan == "Input Absensi":
-        try: tab_absen.render(db)
-        except Exception as e: st.error(f"Error: {e}")
-    elif pilihan == "Input Nilai":
+        tab_absen.render(db)
+    elif pilihan == "Input Hafalan":
+        tab_hafalan.render(db)
+    elif pilihan == "Input Nilai Akademik":
         tab_nilai.render(db)
     elif pilihan == "Cetak Raport":
         tab_cetak.render(db)

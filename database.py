@@ -386,3 +386,22 @@ class DataEngine:
                 
             return True, "Absensi harian berhasil disimpan!"
         except Exception as e: return False, f"Gagal menyimpan absen: {e}"
+    def get_absensi_bulanan(self, bulan, tahun):
+        """Mengambil seluruh data absensi santri dalam 1 bulan penuh"""
+        if not self.lembaga_id: return []
+        import calendar
+        try:
+            _, max_days = calendar.monthrange(int(tahun), int(bulan))
+            start_date = f"{int(tahun):04d}-{int(bulan):02d}-01"
+            end_date = f"{int(tahun):04d}-{int(bulan):02d}-{max_days:02d}"
+            
+            res = self.supabase.table("absensi_harian") \
+                .select("*") \
+                .eq("lembaga_id", self.lembaga_id) \
+                .gte("tanggal", start_date) \
+                .lte("tanggal", end_date) \
+                .execute()
+            return res.data if res.data else []
+        except Exception as e:
+            print("Error get_absensi_bulanan:", e)
+            return []
