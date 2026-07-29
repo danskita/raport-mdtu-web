@@ -51,7 +51,6 @@ class DataEngine:
         username_bersih = username.strip()
         
         try:
-            # CEK DATA GANDA: Apakah NIP/Username sudah dipakai?
             cek_user = self.supabase.table("guru").select("nama_guru").eq("username", username_bersih).execute()
             if cek_user.data:
                 return False, f"⚠️ Gagal! NIP/Username '{username_bersih}' sudah terdaftar atas nama {cek_user.data[0]['nama_guru']}. Gunakan NIP lain!"
@@ -87,7 +86,6 @@ class DataEngine:
         username_bersih = username.strip()
         
         try:
-            # CEK DATA GANDA (Boleh pakai username sendiri, tidak boleh pakai milik orang lain)
             cek_user = self.supabase.table("guru").select("id, nama_guru").eq("username", username_bersih).execute()
             if cek_user.data:
                 pemilik_lama = cek_user.data[0]
@@ -180,7 +178,6 @@ class DataEngine:
                     if not lembagas_aktif:
                         return False, "⏳ Akses Ditolak: Madrasah Anda belum disetujui Super Admin."
                     
-                    # Set peran sebagai KEPALA MADRASAH
                     for a in lembagas_aktif:
                         a["_role"] = "kepala_madrasah"
                         a["_kelas_binaan"] = None
@@ -212,7 +209,9 @@ class DataEngine:
         self.kelas_binaan = None
         self.list_akses_lembaga = []
 
-    # --- SMART FILTER SANTRI ---
+    # ==========================================================
+    # SMART FILTER SANTRI + AUTO URUT ABJAD (A - Z) & AUTO NOMOR
+    # ==========================================================
     def muat_data_santri(self):
         if not self.lembaga_id: 
             return
@@ -221,7 +220,7 @@ class DataEngine:
             semua_santri = res.data if res.data else []
             
             if self.role not in ["wali_kelas", "guru"] or not self.kelas_binaan:
-                self.data_master = semua_santri
+                data_filtered = semua_santri
             else:
                 kelas_binaan_bersih = str(self.kelas_binaan).upper().replace(" ", "")
                 santri_kelasku = []
@@ -230,7 +229,20 @@ class DataEngine:
                     kelas_santri = str(data_lengkap.get("kelas_santri", data_lengkap.get("kelas", "")))
                     if kelas_santri.upper().replace(" ", "") == kelas_binaan_bersih:
                         santri_kelasku.append(s)
-                self.data_master = santri_kelasku
+                data_filtered = santri_kelasku
+            
+            # 1. URUTKAN OTOMATIS BERDASARKAN ABJAD NAMA (A - Z)
+            data_sorted = sorted(
+                data_filtered, 
+                key=lambda x: str(x.get("nama", "")).strip().lower()
+            )
+            
+            # 2. BERIKAN NOMOR URUT DINAMIS SECARA KONSISTEN (1, 2, 3...)
+            #    Sehingga walau ada data yg dihapus/diedit, nomor tidak akan lompat.
+            for idx, item in enumerate(data_sorted, start=1):
+                item["no_urut"] = idx
+                
+            self.data_master = data_sorted
         except Exception as e: 
             print(f"Error muat_data_santri: {e}")
 
@@ -264,7 +276,6 @@ class DataEngine:
         no_induk_bersih = str(no_induk).strip()
         
         try:
-            # CEK DATA GANDA: Pastikan Nomor Induk belum dipakai orang lain di Madrasah ini
             cek_induk = self.supabase.table("biodata_santri").select("id, nama").eq("lembaga_id", self.lembaga_id).eq("no_induk", no_induk_bersih).execute()
             if cek_induk.data:
                 pemilik_lama = cek_induk.data[0]
@@ -299,11 +310,9 @@ class DataEngine:
     def hapus_biodata(self, santri_id):
         if not self.lembaga_id: return False, "Akses ditolak"
         try:
-            # Hapus nilai dan absen dulu agar tidak ada data yatim piatu (cascade effect manual)
             self.supabase.table("nilai_santri").delete().eq("santri_id", santri_id).execute()
             self.supabase.table("absensi_harian").delete().eq("santri_id", santri_id).execute()
             
-            # Baru hapus biodata utamanya
             self.supabase.table("biodata_santri").delete().eq("id", santri_id).eq("lembaga_id", self.lembaga_id).execute()
             
             self.muat_data_santri()
@@ -386,6 +395,7 @@ class DataEngine:
                 
             return True, "Absensi harian berhasil disimpan!"
         except Exception as e: return False, f"Gagal menyimpan absen: {e}"
+
     def get_absensi_bulanan(self, bulan, tahun):
         """Mengambil seluruh data absensi santri dalam 1 bulan penuh"""
         if not self.lembaga_id: return []
